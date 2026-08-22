@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+
 import {
   BrowserRouter,
   Routes,
@@ -9,12 +10,39 @@ import {
 
 
 // ==================================================
+// GET / CREATE USER ID
+// ==================================================
+
+function getUserId() {
+
+  let userId =
+    sessionStorage.getItem("sketchers_user_id");
+
+
+  if (!userId) {
+
+    userId =
+      crypto.randomUUID();
+
+    sessionStorage.setItem(
+      "sketchers_user_id",
+      userId
+    );
+  }
+
+
+  return userId;
+}
+
+
+// ==================================================
 // HOME PAGE
 // ==================================================
 
 function HomePage() {
 
   const [roomCode, setRoomCode] = useState("");
+
   const [message, setMessage] = useState("");
 
   const navigate = useNavigate();
@@ -31,7 +59,10 @@ function HomePage() {
         }
       );
 
-      const data = await response.json();
+
+      const data =
+        await response.json();
+
 
       if (data.success) {
 
@@ -41,7 +72,7 @@ function HomePage() {
 
       }
 
-    } catch (error) {
+    } catch {
 
       setMessage(
         "Could not connect to the server."
@@ -104,7 +135,7 @@ function HomePage() {
         `/room/${data.room_code}`
       );
 
-    } catch (error) {
+    } catch {
 
       setMessage(
         "Could not connect to the server."
@@ -153,7 +184,6 @@ function HomePage() {
       )}
 
     </div>
-
   );
 }
 
@@ -164,18 +194,141 @@ function HomePage() {
 
 function RoomPage() {
 
-  const { roomCode } = useParams();
+  const { roomCode } =
+    useParams();
 
-  const canvasRef = useRef(null);
 
-  const websocketRef = useRef(null);
+  const canvasRef =
+    useRef(null);
 
-  const isDrawing = useRef(false);
 
-  const lastPosition = useRef({
-    x: 0,
-    y: 0
-  });
+  const websocketRef =
+    useRef(null);
+
+
+  const isDrawing =
+    useRef(false);
+
+
+  const currentStroke =
+    useRef([]);
+
+
+  const userId =
+    useRef(getUserId());
+
+
+  // ------------------------------------------------
+  // Draw complete stroke
+  // ------------------------------------------------
+
+  const drawStroke = (stroke) => {
+
+    const canvas =
+      canvasRef.current;
+
+    if (!canvas) return;
+
+
+    const context =
+      canvas.getContext("2d");
+
+
+    const points =
+      stroke.points;
+
+
+    if (points.length < 2) {
+      return;
+    }
+
+
+    context.beginPath();
+
+
+    context.lineWidth =
+      stroke.size;
+
+
+    context.strokeStyle =
+      stroke.color;
+
+
+    context.lineCap =
+      "round";
+
+
+    context.lineJoin =
+      "round";
+
+
+    context.moveTo(
+      points[0].x,
+      points[0].y
+    );
+
+
+    for (
+      let i = 1;
+      i < points.length;
+      i++
+    ) {
+
+      context.lineTo(
+        points[i].x,
+        points[i].y
+      );
+
+    }
+
+
+    context.stroke();
+  };
+
+
+  // ------------------------------------------------
+  // Redraw complete board
+  // ------------------------------------------------
+
+  const redrawBoard = (
+    strokes
+  ) => {
+
+    const canvas =
+      canvasRef.current;
+
+    const context =
+      canvas.getContext("2d");
+
+
+    context.clearRect(
+      0,
+      0,
+      canvas.width,
+      canvas.height
+    );
+
+
+    context.fillStyle =
+      "white";
+
+
+    context.fillRect(
+      0,
+      0,
+      canvas.width,
+      canvas.height
+    );
+
+
+    for (
+      const stroke of strokes
+    ) {
+
+      drawStroke(stroke);
+
+    }
+  };
 
 
   // ------------------------------------------------
@@ -187,15 +340,19 @@ function RoomPage() {
     const canvas =
       canvasRef.current;
 
+
+    canvas.width = 1000;
+
+    canvas.height = 600;
+
+
     const context =
       canvas.getContext("2d");
 
 
-    canvas.width = 1000;
-    canvas.height = 600;
+    context.fillStyle =
+      "white";
 
-
-    context.fillStyle = "white";
 
     context.fillRect(
       0,
@@ -204,26 +361,18 @@ function RoomPage() {
       canvas.height
     );
 
-
-    context.lineWidth = 3;
-
-    context.lineCap = "round";
-
-    context.strokeStyle = "black";
-
-
   }, []);
 
 
   // ------------------------------------------------
-  // WebSocket setup
+  // WebSocket
   // ------------------------------------------------
 
   useEffect(() => {
 
     const websocket =
       new WebSocket(
-        `ws://localhost:8000/ws/${roomCode}`
+        `ws://localhost:8000/ws/${roomCode}/${userId.current}`
       );
 
 
@@ -234,7 +383,7 @@ function RoomPage() {
     websocket.onopen = () => {
 
       console.log(
-        `Connected to room ${roomCode}`
+        `[WS CONNECTED] room=${roomCode} user=${userId.current}`
       );
 
     };
@@ -242,24 +391,43 @@ function RoomPage() {
 
     websocket.onmessage = (event) => {
 
+      console.log(
+        "[WS RECEIVED]",
+        event.data
+      );
+
       const data =
         JSON.parse(event.data);
 
 
-      drawLine(
-        data.x1,
-        data.y1,
-        data.x2,
-        data.y2
+      if (
+        data.type === "history" ||
+        data.type === "stroke"
+      ) {
+
+        drawStroke(
+          data.stroke
+        );
+
+      }
+
+    };
+
+
+    websocket.onerror = (error) => {
+
+      console.error(
+        "[WS ERROR]",
+        error
       );
 
     };
 
 
-    websocket.onclose = () => {
+    websocket.onclose = (event) => {
 
       console.log(
-        "WebSocket disconnected"
+        `[WS CLOSED] code=${event.code}`
       );
 
     };
@@ -271,20 +439,69 @@ function RoomPage() {
 
     };
 
-
   }, [roomCode]);
 
 
   // ------------------------------------------------
-  // Draw line on canvas
+  // Mouse down
   // ------------------------------------------------
 
-  const drawLine = (
-    x1,
-    y1,
-    x2,
-    y2
+  const handleMouseDown = (
+    event
   ) => {
+
+    isDrawing.current =
+      true;
+
+
+    currentStroke.current = [
+
+      {
+        x: event.nativeEvent.offsetX,
+        y: event.nativeEvent.offsetY
+      }
+
+    ];
+
+  };
+
+
+  // ------------------------------------------------
+  // Mouse move
+  // ------------------------------------------------
+
+  const handleMouseMove = (
+    event
+  ) => {
+
+    if (
+      !isDrawing.current
+    ) {
+
+      return;
+
+    }
+
+
+    const point = {
+
+      x: event.nativeEvent.offsetX,
+
+      y: event.nativeEvent.offsetY
+
+    };
+
+
+    const points =
+      currentStroke.current;
+
+
+    const previous =
+      points[points.length - 1];
+
+
+    points.push(point);
+
 
     const canvas =
       canvasRef.current;
@@ -295,99 +512,29 @@ function RoomPage() {
 
     context.beginPath();
 
+
+    context.lineWidth = 3;
+
+    context.lineCap =
+      "round";
+
+    context.strokeStyle =
+      "black";
+
+
     context.moveTo(
-      x1,
-      y1
+      previous.x,
+      previous.y
     );
+
 
     context.lineTo(
-      x2,
-      y2
+      point.x,
+      point.y
     );
+
 
     context.stroke();
-
-  };
-
-
-  // ------------------------------------------------
-  // Mouse down
-  // ------------------------------------------------
-
-  const handleMouseDown = (event) => {
-
-    isDrawing.current = true;
-
-
-    lastPosition.current = {
-      x: event.nativeEvent.offsetX,
-      y: event.nativeEvent.offsetY
-    };
-
-  };
-
-
-  // ------------------------------------------------
-  // Mouse move
-  // ------------------------------------------------
-
-  const handleMouseMove = (event) => {
-
-    if (!isDrawing.current) {
-      return;
-    }
-
-
-    const x =
-      event.nativeEvent.offsetX;
-
-    const y =
-      event.nativeEvent.offsetY;
-
-
-    const previousX =
-      lastPosition.current.x;
-
-    const previousY =
-      lastPosition.current.y;
-
-
-    // Draw locally
-    drawLine(
-      previousX,
-      previousY,
-      x,
-      y
-    );
-
-
-    // Send drawing event
-    // to the server
-
-    if (
-      websocketRef.current &&
-      websocketRef.current.readyState === WebSocket.OPEN
-    ) {
-
-      websocketRef.current.send(
-        JSON.stringify({
-
-          x1: previousX,
-          y1: previousY,
-
-          x2: x,
-          y2: y
-
-        })
-      );
-
-    }
-
-
-    lastPosition.current = {
-      x,
-      y
-    };
 
   };
 
@@ -398,7 +545,68 @@ function RoomPage() {
 
   const handleMouseUp = () => {
 
-    isDrawing.current = false;
+    if (
+      !isDrawing.current
+    ) {
+
+      return;
+
+    }
+
+
+    isDrawing.current =
+      false;
+
+
+    if (
+      currentStroke.current.length < 2
+    ) {
+
+      currentStroke.current =
+        [];
+
+      return;
+
+    }
+
+
+    const stroke = {
+
+      points:
+        currentStroke.current,
+
+      color: "#000000",
+
+      size: 3
+
+    };
+
+
+    // Send complete stroke
+
+    if (
+      websocketRef.current &&
+      websocketRef.current.readyState ===
+        WebSocket.OPEN
+    ) {
+
+      const message = JSON.stringify({
+        type: "stroke",
+        stroke: stroke
+      });
+
+      console.log(
+        "[WS SEND]",
+        message
+      );
+
+      websocketRef.current.send(message);
+
+    }
+
+
+    currentStroke.current =
+      [];
 
   };
 
@@ -409,12 +617,19 @@ function RoomPage() {
 
       <h1>Sketchers</h1>
 
+
       <h2>
         Room: {roomCode}
       </h2>
 
 
+      <p>
+        User: {userId.current}
+      </p>
+
+
       <canvas
+
         ref={canvasRef}
 
         onMouseDown={
@@ -435,8 +650,10 @@ function RoomPage() {
 
         style={{
           border: "2px solid black",
+
           cursor: "crosshair"
         }}
+
       />
 
     </div>
@@ -473,7 +690,6 @@ function App() {
     </BrowserRouter>
 
   );
-
 }
 
 

@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from datetime import datetime, timezone
 import random
 import string
 
@@ -17,29 +18,33 @@ app.add_middleware(
 )
 
 
-# --------------------------------------------------
-# Room storage
-# --------------------------------------------------
+# ==================================================
+# ROOM STORAGE
+# ==================================================
 
 rooms = set()
 
-# Stores active WebSocket connections for each room
 room_connections = {}
 
+room_strokes = {}
 
-# --------------------------------------------------
-# Request model
-# --------------------------------------------------
+room_user_history = {}
+
+
+# ==================================================
+# REQUEST MODEL
+# ==================================================
 
 class RoomRequest(BaseModel):
     room_code: str
 
 
-# --------------------------------------------------
-# Generate room code
-# --------------------------------------------------
+# ==================================================
+# ROOM CODE
+# ==================================================
 
 def generate_room_code():
+
     characters = string.ascii_uppercase + string.digits
 
     return "".join(
@@ -47,20 +52,30 @@ def generate_room_code():
     )
 
 
-# --------------------------------------------------
-# Home
-# --------------------------------------------------
+# ==================================================
+# TIME
+# ==================================================
+
+def current_time():
+
+    return datetime.now(timezone.utc).isoformat()
+
+
+# ==================================================
+# HOME
+# ==================================================
 
 @app.get("/")
 def home():
+
     return {
         "message": "Sketchers backend is running"
     }
 
 
-# --------------------------------------------------
-# Create room
-# --------------------------------------------------
+# ==================================================
+# CREATE ROOM
+# ==================================================
 
 @app.post("/create-room")
 def create_room():
@@ -76,15 +91,19 @@ def create_room():
 
     room_connections[room_code] = []
 
+    room_strokes[room_code] = []
+
+    room_user_history[room_code] = {}
+
     return {
         "success": True,
         "room_code": room_code
     }
 
 
-# --------------------------------------------------
-# Join room
-# --------------------------------------------------
+# ==================================================
+# JOIN ROOM
+# ==================================================
 
 @app.post("/join-room")
 def join_room(request: RoomRequest):
@@ -104,63 +123,152 @@ def join_room(request: RoomRequest):
     }
 
 
-# --------------------------------------------------
-# WebSocket
-# --------------------------------------------------
+# ==================================================
+# WEBSOCKET
+# ==================================================
 
-@app.websocket("/ws/{room_code}")
+@app.websocket("/ws/{room_code}/{user_id}")
 async def websocket_endpoint(
     websocket: WebSocket,
-    room_code: str
+    room_code: str,
+    user_id: str
 ):
 
     room_code = room_code.upper()
 
-    # Make sure room exists
     if room_code not in rooms:
-
-        await websocket.close(
-            code=1008
-        )
-
+        await websocket.close(code=1008)
         return
 
-    # Accept connection
     await websocket.accept()
 
-    # Add user to room
+    # ----------------------------------------------
+    # Register this connection
+    # ----------------------------------------------
+
     room_connections[room_code].append(websocket)
 
+    # ----------------------------------------------
+    # Create user history if necessary
+    # ----------------------------------------------
+
+    if user_id not in room_user_history[room_code]:
+
+        room_user_history[room_code][user_id] = {
+            "undo": [],
+            "redo": []
+        }
+
     print(
-        f"User connected to room {room_code}"
+        f"[CONNECT] user={user_id} room={room_code}"
     )
+
+    print(
+        f"[ROOM] {room_code} has "
+        f"{len(room_connections[room_code])} connection(s)"
+    )
+
+    # ----------------------------------------------
+    # SEND EXISTING STROKES TO NEW USER
+    # ----------------------------------------------
+
+    for stroke in room_strokes[room_code]:
+
+        await websocket.send_json({
+            "type": "history",
+            "stroke": stroke
+        })
 
     try:
 
         while True:
 
-            # Wait for a drawing event
-            message = await websocket.receive_text()
+            message = await websocket.receive_json()
 
-            # Send the drawing event to everyone
-            # else in the same room
+            message_type = message.get("type")
 
-            for connection in room_connections[room_code]:
+            # ======================================
+            # NEW STROKE
+            # ======================================
 
-                if connection != websocket:
+            if message_type == "stroke":
 
-                    await connection.send_text(
-                        message
-                    )
+                stroke = message["stroke"]
+
+                stroke["user_id"] = user_id
+                stroke["created_at"] = current_time()
+
+                # Store globally in room
+                room_strokes[room_code].append(stroke)
+
+                # Store in this user's history
+                room_user_history[
+                    room_code
+                ][user_id]["undo"].append(stroke)
+
+                # New stroke clears this user's redo
+                room_user_history[
+                    room_code
+                ][user_id]["redo"].clear()
+
+                print(
+                    f"[STROKE] user={user_id} "
+                    f"room={room_code}"
+                )
+
+                # ----------------------------------
+                # BROADCAST TO EVERY OTHER CONNECTION
+                # ----------------------------------
+
+                dead_connections = []
+
+                for connection in room_connections[room_code]:
+
+                    if connection == websocket:
+                        continue
+
+                    try:
+
+                        await connection.send_json({
+                            "type": "stroke",
+                            "stroke": stroke
+                        })
+
+                    except Exception:
+
+                        dead_connections.append(connection)
+
+
+                # Remove dead connections
+                for connection in dead_connections:
+
+                    if connection in room_connections[room_code]:
+
+                        room_connections[
+                            room_code
+                        ].remove(connection)
+
+
+            # ======================================
+            # DISCONNECT
+            # ======================================
 
     except WebSocketDisconnect:
 
         print(
-            f"User disconnected from room {room_code}"
+            f"[DISCONNECT] user={user_id} "
+            f"room={room_code}"
         )
 
         if websocket in room_connections[room_code]:
 
-            room_connections[room_code].remove(
-                websocket
-            )
+            room_connections[
+                room_code
+            ].remove(websocket)
+
+
+        print(
+            f"[ROOM] {room_code} has "
+            f"{len(room_connections[room_code])} "
+            f"connection(s)"
+        )
