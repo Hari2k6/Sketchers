@@ -9,14 +9,16 @@ import {
 } from "react-router-dom";
 
 
-// ==================================================
-// GET / CREATE USER ID
-// ==================================================
+// ============================================================
+// USER ID
+// ============================================================
 
 function getUserId() {
 
   let userId =
-    sessionStorage.getItem("sketchers_user_id");
+    sessionStorage.getItem(
+      "sketchers_user_id"
+    );
 
 
   if (!userId) {
@@ -28,6 +30,7 @@ function getUserId() {
       "sketchers_user_id",
       userId
     );
+
   }
 
 
@@ -35,29 +38,37 @@ function getUserId() {
 }
 
 
-// ==================================================
+// ============================================================
 // HOME PAGE
-// ==================================================
+// ============================================================
 
 function HomePage() {
 
-  const [roomCode, setRoomCode] = useState("");
+  const [roomCode, setRoomCode] =
+    useState("");
 
-  const [message, setMessage] = useState("");
+  const [message, setMessage] =
+    useState("");
 
-  const navigate = useNavigate();
+  const navigate =
+    useNavigate();
 
+
+  // ----------------------------------------------------------
+  // CREATE ROOM
+  // ----------------------------------------------------------
 
   const createRoom = async () => {
 
     try {
 
-      const response = await fetch(
-        "http://localhost:8000/create-room",
-        {
-          method: "POST"
-        }
-      );
+      const response =
+        await fetch(
+          "http://localhost:8000/create-room",
+          {
+            method: "POST"
+          }
+        );
 
 
       const data =
@@ -72,20 +83,31 @@ function HomePage() {
 
       }
 
-    } catch {
+    }
+
+    catch (error) {
+
+      console.error(error);
 
       setMessage(
         "Could not connect to the server."
       );
 
     }
+
   };
 
+
+  // ----------------------------------------------------------
+  // JOIN ROOM
+  // ----------------------------------------------------------
 
   const joinRoom = async () => {
 
     const code =
-      roomCode.trim().toUpperCase();
+      roomCode
+        .trim()
+        .toUpperCase();
 
 
     if (code.length !== 4) {
@@ -95,26 +117,34 @@ function HomePage() {
       );
 
       return;
+
     }
 
 
     try {
 
-      const response = await fetch(
-        "http://localhost:8000/join-room",
-        {
-          method: "POST",
+      const response =
+        await fetch(
+          "http://localhost:8000/join-room",
+          {
 
-          headers: {
-            "Content-Type":
-              "application/json"
-          },
+            method: "POST",
 
-          body: JSON.stringify({
-            room_code: code
-          })
-        }
-      );
+            headers: {
+
+              "Content-Type":
+                "application/json"
+
+            },
+
+            body: JSON.stringify({
+
+              room_code: code
+
+            })
+
+          }
+        );
 
 
       const data =
@@ -128,6 +158,7 @@ function HomePage() {
         );
 
         return;
+
       }
 
 
@@ -135,15 +166,24 @@ function HomePage() {
         `/room/${data.room_code}`
       );
 
-    } catch {
+    }
+
+    catch (error) {
+
+      console.error(error);
 
       setMessage(
         "Could not connect to the server."
       );
 
     }
+
   };
 
+
+  // ----------------------------------------------------------
+  // UI
+  // ----------------------------------------------------------
 
   return (
 
@@ -152,7 +192,9 @@ function HomePage() {
       <h1>Sketchers</h1>
 
 
-      <button onClick={createRoom}>
+      <button
+        onClick={createRoom}
+      >
         Create Room
       </button>
 
@@ -166,31 +208,45 @@ function HomePage() {
         maxLength={4}
         value={roomCode}
 
-        onChange={(e) =>
+        onChange={(event) => {
+
           setRoomCode(
-            e.target.value.toUpperCase()
-          )
-        }
+            event.target.value
+              .toUpperCase()
+          );
+
+          setMessage("");
+
+        }}
+
       />
 
 
-      <button onClick={joinRoom}>
+      <button
+        onClick={joinRoom}
+      >
         Join Room
       </button>
 
 
       {message && (
-        <p>{message}</p>
+
+        <p>
+          {message}
+        </p>
+
       )}
 
     </div>
+
   );
+
 }
 
 
-// ==================================================
-// WHITEBOARD
-// ==================================================
+// ============================================================
+// ROOM PAGE
+// ============================================================
 
 function RoomPage() {
 
@@ -198,60 +254,67 @@ function RoomPage() {
     useParams();
 
 
+  // ----------------------------------------------------------
+  // References
+  // ----------------------------------------------------------
+
   const canvasRef =
     useRef(null);
-
 
   const websocketRef =
     useRef(null);
 
+  const userId =
+    useRef(getUserId());
 
   const isDrawing =
     useRef(false);
-
 
   const currentStroke =
     useRef([]);
 
 
-  const userId =
-    useRef(getUserId());
+  // IMPORTANT:
+  // This is the client's copy of the authoritative
+  // server-side board.
+
+  const strokesRef =
+    useRef([]);
 
 
-  // ------------------------------------------------
-  // Draw complete stroke
-  // ------------------------------------------------
+  // ----------------------------------------------------------
+  // Draw ONE stroke
+  // ----------------------------------------------------------
 
-  const drawStroke = (stroke) => {
+  const drawStroke = (
+    context,
+    stroke
+  ) => {
 
-    const canvas =
-      canvasRef.current;
+    if (
+      !stroke ||
+      !stroke.points ||
+      stroke.points.length < 2
+    ) {
 
-    if (!canvas) return;
+      return;
 
-
-    const context =
-      canvas.getContext("2d");
+    }
 
 
     const points =
       stroke.points;
 
 
-    if (points.length < 2) {
-      return;
-    }
-
-
     context.beginPath();
 
 
     context.lineWidth =
-      stroke.size;
+      stroke.size || 3;
 
 
     context.strokeStyle =
-      stroke.color;
+      stroke.color || "#000000";
 
 
     context.lineCap =
@@ -283,23 +346,32 @@ function RoomPage() {
 
 
     context.stroke();
+
   };
 
 
-  // ------------------------------------------------
-  // Redraw complete board
-  // ------------------------------------------------
+  // ----------------------------------------------------------
+  // Redraw entire board
+  // ----------------------------------------------------------
 
-  const redrawBoard = (
-    strokes
-  ) => {
+  const redrawBoard = () => {
 
     const canvas =
       canvasRef.current;
 
+
+    if (!canvas) {
+
+      return;
+
+    }
+
+
     const context =
       canvas.getContext("2d");
 
+
+    // Clear
 
     context.clearRect(
       0,
@@ -309,8 +381,10 @@ function RoomPage() {
     );
 
 
+    // White background
+
     context.fillStyle =
-      "white";
+      "#ffffff";
 
 
     context.fillRect(
@@ -321,19 +395,26 @@ function RoomPage() {
     );
 
 
+    // Replay all active strokes
+
     for (
-      const stroke of strokes
+      const stroke
+      of strokesRef.current
     ) {
 
-      drawStroke(stroke);
+      drawStroke(
+        context,
+        stroke
+      );
 
     }
+
   };
 
 
-  // ------------------------------------------------
-  // Canvas setup
-  // ------------------------------------------------
+  // ==========================================================
+  // CANVAS INITIALIZATION
+  // ==========================================================
 
   useEffect(() => {
 
@@ -346,29 +427,21 @@ function RoomPage() {
     canvas.height = 600;
 
 
-    const context =
-      canvas.getContext("2d");
-
-
-    context.fillStyle =
-      "white";
-
-
-    context.fillRect(
-      0,
-      0,
-      canvas.width,
-      canvas.height
-    );
+    redrawBoard();
 
   }, []);
 
 
-  // ------------------------------------------------
-  // WebSocket
-  // ------------------------------------------------
+  // ==========================================================
+  // WEBSOCKET
+  // ==========================================================
 
   useEffect(() => {
+
+    console.log(
+      `[WS CONNECTING] room=${roomCode} user=${userId.current}`
+    );
+
 
     const websocket =
       new WebSocket(
@@ -380,6 +453,10 @@ function RoomPage() {
       websocket;
 
 
+    // --------------------------------------------------------
+    // OPEN
+    // --------------------------------------------------------
+
     websocket.onopen = () => {
 
       console.log(
@@ -389,32 +466,72 @@ function RoomPage() {
     };
 
 
-    websocket.onmessage = (event) => {
+    // --------------------------------------------------------
+    // MESSAGE
+    // --------------------------------------------------------
+
+    websocket.onmessage = (
+      event
+    ) => {
 
       console.log(
         "[WS RECEIVED]",
         event.data
       );
 
+
       const data =
         JSON.parse(event.data);
 
 
+      // ======================================================
+      // COMPLETE BOARD STATE
+      // ======================================================
+
       if (
-        data.type === "history" ||
+        data.type === "board_state"
+      ) {
+
+        strokesRef.current =
+          data.strokes || [];
+
+
+        redrawBoard();
+
+        return;
+
+      }
+
+
+      // ======================================================
+      // NEW STROKE
+      // ======================================================
+
+      if (
         data.type === "stroke"
       ) {
 
-        drawStroke(
+        strokesRef.current.push(
           data.stroke
         );
+
+
+        redrawBoard();
+
+        return;
 
       }
 
     };
 
 
-    websocket.onerror = (error) => {
+    // --------------------------------------------------------
+    // ERROR
+    // --------------------------------------------------------
+
+    websocket.onerror = (
+      error
+    ) => {
 
       console.error(
         "[WS ERROR]",
@@ -424,7 +541,13 @@ function RoomPage() {
     };
 
 
-    websocket.onclose = (event) => {
+    // --------------------------------------------------------
+    // CLOSE
+    // --------------------------------------------------------
+
+    websocket.onclose = (
+      event
+    ) => {
 
       console.log(
         `[WS CLOSED] code=${event.code}`
@@ -432,6 +555,10 @@ function RoomPage() {
 
     };
 
+
+    // --------------------------------------------------------
+    // CLEANUP
+    // --------------------------------------------------------
 
     return () => {
 
@@ -442,9 +569,9 @@ function RoomPage() {
   }, [roomCode]);
 
 
-  // ------------------------------------------------
-  // Mouse down
-  // ------------------------------------------------
+  // ==========================================================
+  // MOUSE DOWN
+  // ==========================================================
 
   const handleMouseDown = (
     event
@@ -457,8 +584,13 @@ function RoomPage() {
     currentStroke.current = [
 
       {
-        x: event.nativeEvent.offsetX,
-        y: event.nativeEvent.offsetY
+
+        x:
+          event.nativeEvent.offsetX,
+
+        y:
+          event.nativeEvent.offsetY
+
       }
 
     ];
@@ -466,9 +598,9 @@ function RoomPage() {
   };
 
 
-  // ------------------------------------------------
-  // Mouse move
-  // ------------------------------------------------
+  // ==========================================================
+  // MOUSE MOVE
+  // ==========================================================
 
   const handleMouseMove = (
     event
@@ -485,9 +617,11 @@ function RoomPage() {
 
     const point = {
 
-      x: event.nativeEvent.offsetX,
+      x:
+        event.nativeEvent.offsetX,
 
-      y: event.nativeEvent.offsetY
+      y:
+        event.nativeEvent.offsetY
 
     };
 
@@ -497,14 +631,21 @@ function RoomPage() {
 
 
     const previous =
-      points[points.length - 1];
+      points[
+        points.length - 1
+      ];
 
 
-    points.push(point);
+    points.push(
+      point
+    );
 
+
+    // Draw locally immediately
 
     const canvas =
       canvasRef.current;
+
 
     const context =
       canvas.getContext("2d");
@@ -513,13 +654,20 @@ function RoomPage() {
     context.beginPath();
 
 
-    context.lineWidth = 3;
+    context.lineWidth =
+      3;
+
+
+    context.strokeStyle =
+      "#000000";
+
 
     context.lineCap =
       "round";
 
-    context.strokeStyle =
-      "black";
+
+    context.lineJoin =
+      "round";
 
 
     context.moveTo(
@@ -539,9 +687,9 @@ function RoomPage() {
   };
 
 
-  // ------------------------------------------------
-  // Mouse up
-  // ------------------------------------------------
+  // ==========================================================
+  // MOUSE UP
+  // ==========================================================
 
   const handleMouseUp = () => {
 
@@ -557,6 +705,8 @@ function RoomPage() {
     isDrawing.current =
       false;
 
+
+    // Need at least two points
 
     if (
       currentStroke.current.length < 2
@@ -575,14 +725,18 @@ function RoomPage() {
       points:
         currentStroke.current,
 
-      color: "#000000",
+      color:
+        "#000000",
 
-      size: 3
+      size:
+        3
 
     };
 
 
-    // Send complete stroke
+    // --------------------------------------------------------
+    // Send to server
+    // --------------------------------------------------------
 
     if (
       websocketRef.current &&
@@ -590,17 +744,27 @@ function RoomPage() {
         WebSocket.OPEN
     ) {
 
-      const message = JSON.stringify({
-        type: "stroke",
-        stroke: stroke
-      });
+      const message =
+        JSON.stringify({
+
+          type:
+            "stroke",
+
+          stroke:
+            stroke
+
+        });
+
 
       console.log(
         "[WS SEND]",
         message
       );
 
-      websocketRef.current.send(message);
+
+      websocketRef.current.send(
+        message
+      );
 
     }
 
@@ -611,11 +775,79 @@ function RoomPage() {
   };
 
 
+  // ==========================================================
+  // UNDO
+  // ==========================================================
+
+  const undo = () => {
+
+    if (
+      websocketRef.current &&
+      websocketRef.current.readyState ===
+        WebSocket.OPEN
+    ) {
+
+      console.log(
+        "[UNDO SEND]"
+      );
+
+
+      websocketRef.current.send(
+        JSON.stringify({
+
+          type:
+            "undo"
+
+        })
+      );
+
+    }
+
+  };
+
+
+  // ==========================================================
+  // REDO
+  // ==========================================================
+
+  const redo = () => {
+
+    if (
+      websocketRef.current &&
+      websocketRef.current.readyState ===
+        WebSocket.OPEN
+    ) {
+
+      console.log(
+        "[REDO SEND]"
+      );
+
+
+      websocketRef.current.send(
+        JSON.stringify({
+
+          type:
+            "redo"
+
+        })
+      );
+
+    }
+
+  };
+
+
+  // ==========================================================
+  // UI
+  // ==========================================================
+
   return (
 
     <div>
 
-      <h1>Sketchers</h1>
+      <h1>
+        Sketchers
+      </h1>
 
 
       <h2>
@@ -624,8 +856,29 @@ function RoomPage() {
 
 
       <p>
-        User: {userId.current}
+        User ID: {userId.current}
       </p>
+
+
+      <div>
+
+        <button
+          onClick={undo}
+        >
+          Undo
+        </button>
+
+
+        <button
+          onClick={redo}
+        >
+          Redo
+        </button>
+
+      </div>
+
+
+      <br />
 
 
       <canvas
@@ -649,9 +902,16 @@ function RoomPage() {
         }
 
         style={{
-          border: "2px solid black",
 
-          cursor: "crosshair"
+          border:
+            "2px solid black",
+
+          cursor:
+            "crosshair",
+
+          display:
+            "block"
+
         }}
 
       />
@@ -659,12 +919,13 @@ function RoomPage() {
     </div>
 
   );
+
 }
 
 
-// ==================================================
+// ============================================================
 // APP
-// ==================================================
+// ============================================================
 
 function App() {
 
@@ -676,13 +937,17 @@ function App() {
 
         <Route
           path="/"
-          element={<HomePage />}
+          element={
+            <HomePage />
+          }
         />
 
 
         <Route
           path="/room/:roomCode"
-          element={<RoomPage />}
+          element={
+            <RoomPage />
+          }
         />
 
       </Routes>
@@ -690,6 +955,7 @@ function App() {
     </BrowserRouter>
 
   );
+
 }
 
 

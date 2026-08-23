@@ -6,6 +6,10 @@ import random
 import string
 
 
+# ============================================================
+# APP
+# ============================================================
+
 app = FastAPI(title="Sketchers API")
 
 
@@ -18,30 +22,61 @@ app.add_middleware(
 )
 
 
-# ==================================================
+# ============================================================
 # ROOM STORAGE
-# ==================================================
+# ============================================================
 
+# Existing room codes
 rooms = set()
 
+# Active WebSocket connections
+#
+# {
+#     "AB12": {
+#         "user_id_1": websocket,
+#         "user_id_2": websocket
+#     }
+# }
+#
 room_connections = {}
 
+# Current active strokes on each board
+#
+# {
+#     "AB12": [
+#         stroke1,
+#         stroke2,
+#         stroke3
+#     ]
+# }
+#
 room_strokes = {}
 
+# Per-user undo / redo history
+#
+# {
+#     "AB12": {
+#         "user_id_1": {
+#             "undo": [...],
+#             "redo": [...]
+#         }
+#     }
+# }
+#
 room_user_history = {}
 
 
-# ==================================================
+# ============================================================
 # REQUEST MODEL
-# ==================================================
+# ============================================================
 
 class RoomRequest(BaseModel):
     room_code: str
 
 
-# ==================================================
-# ROOM CODE
-# ==================================================
+# ============================================================
+# ROOM CODE GENERATOR
+# ============================================================
 
 def generate_room_code():
 
@@ -52,18 +87,20 @@ def generate_room_code():
     )
 
 
-# ==================================================
+# ============================================================
 # TIME
-# ==================================================
+# ============================================================
 
 def current_time():
 
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(
+        timezone.utc
+    ).isoformat()
 
 
-# ==================================================
+# ============================================================
 # HOME
-# ==================================================
+# ============================================================
 
 @app.get("/")
 def home():
@@ -73,9 +110,9 @@ def home():
     }
 
 
-# ==================================================
+# ============================================================
 # CREATE ROOM
-# ==================================================
+# ============================================================
 
 @app.post("/create-room")
 def create_room():
@@ -89,11 +126,15 @@ def create_room():
 
     rooms.add(room_code)
 
-    room_connections[room_code] = []
+    room_connections[room_code] = {}
 
     room_strokes[room_code] = []
 
     room_user_history[room_code] = {}
+
+    print(
+        f"[ROOM CREATED] {room_code}"
+    )
 
     return {
         "success": True,
@@ -101,12 +142,14 @@ def create_room():
     }
 
 
-# ==================================================
+# ============================================================
 # JOIN ROOM
-# ==================================================
+# ============================================================
 
 @app.post("/join-room")
-def join_room(request: RoomRequest):
+def join_room(
+    request: RoomRequest
+):
 
     room_code = request.room_code.upper()
 
@@ -123,11 +166,70 @@ def join_room(request: RoomRequest):
     }
 
 
-# ==================================================
-# WEBSOCKET
-# ==================================================
+# ============================================================
+# SEND BOARD STATE
+# ============================================================
 
-@app.websocket("/ws/{room_code}/{user_id}")
+async def send_board_state(
+    websocket,
+    room_code
+):
+
+    await websocket.send_json({
+        "type": "board_state",
+        "strokes": room_strokes[room_code]
+    })
+
+
+# ============================================================
+# BROADCAST BOARD STATE
+# ============================================================
+
+async def broadcast_board_state(
+    room_code
+):
+
+    message = {
+        "type": "board_state",
+        "strokes": room_strokes[room_code]
+    }
+
+    disconnected_users = []
+
+    for user_id, websocket in list(
+        room_connections[room_code].items()
+    ):
+
+        try:
+
+            await websocket.send_json(
+                message
+            )
+
+        except Exception:
+
+            disconnected_users.append(
+                user_id
+            )
+
+
+    for user_id in disconnected_users:
+
+        room_connections[
+            room_code
+        ].pop(
+            user_id,
+            None
+        )
+
+
+# ============================================================
+# WEBSOCKET
+# ============================================================
+
+@app.websocket(
+    "/ws/{room_code}/{user_id}"
+)
 async def websocket_endpoint(
     websocket: WebSocket,
     room_code: str,
@@ -136,135 +238,385 @@ async def websocket_endpoint(
 
     room_code = room_code.upper()
 
+    # --------------------------------------------------------
+    # Check room
+    # --------------------------------------------------------
+
     if room_code not in rooms:
-        await websocket.close(code=1008)
+
+        await websocket.close(
+            code=1008
+        )
+
         return
+
+
+    # --------------------------------------------------------
+    # Accept WebSocket
+    # --------------------------------------------------------
 
     await websocket.accept()
 
-    # ----------------------------------------------
-    # Register this connection
-    # ----------------------------------------------
 
-    room_connections[room_code].append(websocket)
+    # --------------------------------------------------------
+    # Register connection
+    # --------------------------------------------------------
 
-    # ----------------------------------------------
-    # Create user history if necessary
-    # ----------------------------------------------
+    room_connections[
+        room_code
+    ][user_id] = websocket
+
+
+    # --------------------------------------------------------
+    # Create user history
+    # --------------------------------------------------------
 
     if user_id not in room_user_history[room_code]:
 
-        room_user_history[room_code][user_id] = {
+        room_user_history[
+            room_code
+        ][user_id] = {
+
             "undo": [],
+
             "redo": []
+
         }
 
+
     print(
-        f"[CONNECT] user={user_id} room={room_code}"
+        f"[CONNECT] "
+        f"user={user_id} "
+        f"room={room_code}"
     )
 
     print(
         f"[ROOM] {room_code} has "
-        f"{len(room_connections[room_code])} connection(s)"
+        f"{len(room_connections[room_code])} "
+        f"connection(s)"
     )
 
-    # ----------------------------------------------
-    # SEND EXISTING STROKES TO NEW USER
-    # ----------------------------------------------
 
-    for stroke in room_strokes[room_code]:
+    # --------------------------------------------------------
+    # IMPORTANT:
+    # Send existing board to newly joined user
+    # --------------------------------------------------------
 
-        await websocket.send_json({
-            "type": "history",
-            "stroke": stroke
-        })
+    await send_board_state(
+        websocket,
+        room_code
+    )
+
 
     try:
 
         while True:
 
-            message = await websocket.receive_json()
+            message = (
+                await websocket.receive_json()
+            )
 
-            message_type = message.get("type")
+            message_type = message.get(
+                "type"
+            )
 
-            # ======================================
-            # NEW STROKE
-            # ======================================
+
+            # =================================================
+            # STROKE
+            # =================================================
 
             if message_type == "stroke":
 
-                stroke = message["stroke"]
+                stroke = message.get(
+                    "stroke"
+                )
+
+                if not stroke:
+
+                    continue
+
+
+                # ---------------------------------------------
+                # Server owns the identity
+                # ---------------------------------------------
 
                 stroke["user_id"] = user_id
-                stroke["created_at"] = current_time()
 
-                # Store globally in room
-                room_strokes[room_code].append(stroke)
+                stroke["id"] = (
+                    f"{user_id}-"
+                    f"{random.randint(100000, 999999)}"
+                )
 
-                # Store in this user's history
+                stroke["created_at"] = (
+                    current_time()
+                )
+
+
+                # ---------------------------------------------
+                # Store in room
+                # ---------------------------------------------
+
+                room_strokes[
+                    room_code
+                ].append(
+                    stroke
+                )
+
+
+                # ---------------------------------------------
+                # Store in user's undo history
+                # ---------------------------------------------
+
                 room_user_history[
                     room_code
-                ][user_id]["undo"].append(stroke)
+                ][user_id]["undo"].append(
+                    stroke
+                )
 
-                # New stroke clears this user's redo
+
+                # New action destroys redo history
+
                 room_user_history[
                     room_code
                 ][user_id]["redo"].clear()
 
+
                 print(
-                    f"[STROKE] user={user_id} "
+                    f"[STROKE] "
+                    f"user={user_id} "
                     f"room={room_code}"
                 )
 
-                # ----------------------------------
-                # BROADCAST TO EVERY OTHER CONNECTION
-                # ----------------------------------
 
-                dead_connections = []
+                # ---------------------------------------------
+                # Broadcast ONLY the new stroke
+                # ---------------------------------------------
 
-                for connection in room_connections[room_code]:
+                message = {
 
-                    if connection == websocket:
-                        continue
+                    "type": "stroke",
+
+                    "stroke": stroke
+
+                }
+
+
+                disconnected_users = []
+
+
+                for (
+                    target_user,
+                    connection
+                ) in list(
+                    room_connections[
+                        room_code
+                    ].items()
+                ):
 
                     try:
 
-                        await connection.send_json({
-                            "type": "stroke",
-                            "stroke": stroke
-                        })
+                        await connection.send_json(
+                            message
+                        )
 
                     except Exception:
 
-                        dead_connections.append(connection)
+                        disconnected_users.append(
+                            target_user
+                        )
 
 
-                # Remove dead connections
-                for connection in dead_connections:
+                for target_user in disconnected_users:
 
-                    if connection in room_connections[room_code]:
+                    room_connections[
+                        room_code
+                    ].pop(
+                        target_user,
+                        None
+                    )
 
-                        room_connections[
-                            room_code
-                        ].remove(connection)
+
+            # =================================================
+            # UNDO
+            # =================================================
+
+            elif message_type == "undo":
+
+                user_history = (
+                    room_user_history[
+                        room_code
+                    ][user_id]
+                )
 
 
-            # ======================================
-            # DISCONNECT
-            # ======================================
+                # Nothing to undo
+
+                if not user_history["undo"]:
+
+                    print(
+                        f"[UNDO IGNORED] "
+                        f"user={user_id} "
+                        f"nothing to undo"
+                    )
+
+                    continue
+
+
+                # ---------------------------------------------
+                # Take latest stroke owned by this user
+                # ---------------------------------------------
+
+                stroke = (
+                    user_history["undo"].pop()
+                )
+
+
+                # ---------------------------------------------
+                # Put it into redo
+                # ---------------------------------------------
+
+                user_history[
+                    "redo"
+                ].append(
+                    stroke
+                )
+
+
+                # ---------------------------------------------
+                # Remove from board
+                # ---------------------------------------------
+
+                room_strokes[
+                    room_code
+                ] = [
+
+                    existing
+
+                    for existing
+                    in room_strokes[room_code]
+
+                    if existing["id"]
+                    != stroke["id"]
+
+                ]
+
+
+                print(
+                    f"[UNDO] "
+                    f"user={user_id} "
+                    f"stroke={stroke['id']}"
+                )
+
+
+                # ---------------------------------------------
+                # Send complete authoritative board
+                # ---------------------------------------------
+
+                await broadcast_board_state(
+                    room_code
+                )
+
+
+            # =================================================
+            # REDO
+            # =================================================
+
+            elif message_type == "redo":
+
+                user_history = (
+                    room_user_history[
+                        room_code
+                    ][user_id]
+                )
+
+
+                # Nothing to redo
+
+                if not user_history["redo"]:
+
+                    print(
+                        f"[REDO IGNORED] "
+                        f"user={user_id} "
+                        f"nothing to redo"
+                    )
+
+                    continue
+
+
+                # ---------------------------------------------
+                # Get latest redo stroke
+                # ---------------------------------------------
+
+                stroke = (
+                    user_history["redo"].pop()
+                )
+
+
+                # ---------------------------------------------
+                # Put back on board
+                # ---------------------------------------------
+
+                room_strokes[
+                    room_code
+                ].append(
+                    stroke
+                )
+
+
+                # ---------------------------------------------
+                # Put back into undo
+                # ---------------------------------------------
+
+                user_history[
+                    "undo"
+                ].append(
+                    stroke
+                )
+
+
+                print(
+                    f"[REDO] "
+                    f"user={user_id} "
+                    f"stroke={stroke['id']}"
+                )
+
+
+                # ---------------------------------------------
+                # Send authoritative board
+                # ---------------------------------------------
+
+                await broadcast_board_state(
+                    room_code
+                )
+
 
     except WebSocketDisconnect:
 
         print(
-            f"[DISCONNECT] user={user_id} "
+            f"[DISCONNECT] "
+            f"user={user_id} "
             f"room={room_code}"
         )
 
-        if websocket in room_connections[room_code]:
+
+        # Only remove if this exact user connection
+        # still belongs to this socket
+
+        current_connection = (
+            room_connections[
+                room_code
+            ].get(user_id)
+        )
+
+
+        if current_connection == websocket:
 
             room_connections[
                 room_code
-            ].remove(websocket)
+            ].pop(
+                user_id,
+                None
+            )
 
 
         print(
