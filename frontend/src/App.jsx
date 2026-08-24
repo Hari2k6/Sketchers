@@ -54,9 +54,9 @@ function HomePage() {
     useNavigate();
 
 
-  // ----------------------------------------------------------
+  // ==========================================================
   // CREATE ROOM
-  // ----------------------------------------------------------
+  // ==========================================================
 
   const createRoom = async () => {
 
@@ -98,9 +98,9 @@ function HomePage() {
   };
 
 
-  // ----------------------------------------------------------
+  // ==========================================================
   // JOIN ROOM
-  // ----------------------------------------------------------
+  // ==========================================================
 
   const joinRoom = async () => {
 
@@ -181,15 +181,13 @@ function HomePage() {
   };
 
 
-  // ----------------------------------------------------------
-  // UI
-  // ----------------------------------------------------------
-
   return (
 
     <div>
 
-      <h1>Sketchers</h1>
+      <h1>
+        Sketchers
+      </h1>
 
 
       <button
@@ -203,9 +201,13 @@ function HomePage() {
 
 
       <input
+
         type="text"
+
         placeholder="Enter room code"
+
         maxLength={4}
+
         value={roomCode}
 
         onChange={(event) => {
@@ -254,9 +256,27 @@ function RoomPage() {
     useParams();
 
 
-  // ----------------------------------------------------------
-  // References
-  // ----------------------------------------------------------
+  const navigate =
+    useNavigate();
+
+
+  // ==========================================================
+  // STATE
+  // ==========================================================
+
+  const [isHost, setIsHost] =
+    useState(false);
+
+  const [connected, setConnected] =
+    useState(false);
+
+  const [message, setMessage] =
+    useState("");
+
+
+  // ==========================================================
+  // REFS
+  // ==========================================================
 
   const canvasRef =
     useRef(null);
@@ -273,18 +293,13 @@ function RoomPage() {
   const currentStroke =
     useRef([]);
 
-
-  // IMPORTANT:
-  // This is the client's copy of the authoritative
-  // server-side board.
-
   const strokesRef =
     useRef([]);
 
 
-  // ----------------------------------------------------------
-  // Draw ONE stroke
-  // ----------------------------------------------------------
+  // ==========================================================
+  // DRAW ONE STROKE
+  // ==========================================================
 
   const drawStroke = (
     context,
@@ -350,9 +365,9 @@ function RoomPage() {
   };
 
 
-  // ----------------------------------------------------------
-  // Redraw entire board
-  // ----------------------------------------------------------
+  // ==========================================================
+  // REDRAW BOARD
+  // ==========================================================
 
   const redrawBoard = () => {
 
@@ -361,17 +376,13 @@ function RoomPage() {
 
 
     if (!canvas) {
-
       return;
-
     }
 
 
     const context =
       canvas.getContext("2d");
 
-
-    // Clear
 
     context.clearRect(
       0,
@@ -380,8 +391,6 @@ function RoomPage() {
       canvas.height
     );
 
-
-    // White background
 
     context.fillStyle =
       "#ffffff";
@@ -394,8 +403,6 @@ function RoomPage() {
       canvas.height
     );
 
-
-    // Replay all active strokes
 
     for (
       const stroke
@@ -438,11 +445,6 @@ function RoomPage() {
 
   useEffect(() => {
 
-    console.log(
-      `[WS CONNECTING] room=${roomCode} user=${userId.current}`
-    );
-
-
     const websocket =
       new WebSocket(
         `ws://localhost:8000/ws/${roomCode}/${userId.current}`
@@ -454,14 +456,16 @@ function RoomPage() {
 
 
     // --------------------------------------------------------
-    // OPEN
+    // CONNECTED
     // --------------------------------------------------------
 
     websocket.onopen = () => {
 
       console.log(
-        `[WS CONNECTED] room=${roomCode} user=${userId.current}`
+        `[WS CONNECTED] room=${roomCode}`
       );
+
+      setConnected(true);
 
     };
 
@@ -485,18 +489,33 @@ function RoomPage() {
 
 
       // ======================================================
-      // COMPLETE BOARD STATE
+      // ROOM INFORMATION
       // ======================================================
 
       if (
-        data.type === "board_state"
+        data.type === "room_info"
       ) {
+
+        setIsHost(
+          data.is_host
+        );
+
 
         strokesRef.current =
           data.strokes || [];
 
 
         redrawBoard();
+
+
+        if (data.is_host) {
+
+          console.log(
+            "[HOST] This user is the room host."
+          );
+
+        }
+
 
         return;
 
@@ -522,6 +541,76 @@ function RoomPage() {
 
       }
 
+
+      // ======================================================
+      // COMPLETE BOARD STATE
+      // ======================================================
+
+      if (
+        data.type === "board_state"
+      ) {
+
+        strokesRef.current =
+          data.strokes || [];
+
+
+        redrawBoard();
+
+        return;
+
+      }
+
+
+      // ======================================================
+      // ROOM DELETED
+      // ======================================================
+
+      if (
+        data.type === "room_deleted"
+      ) {
+
+        setMessage(
+          "The host deleted this room."
+        );
+
+
+        setTimeout(() => {
+
+          navigate("/");
+
+        }, 1200);
+
+
+        return;
+
+      }
+
+
+      // ======================================================
+      // PERMISSION DENIED
+      // ======================================================
+
+      if (
+        data.type ===
+        "permission_denied"
+      ) {
+
+        setMessage(
+          "You do not have permission to perform that action."
+        );
+
+
+        setTimeout(() => {
+
+          setMessage("");
+
+        }, 2500);
+
+
+        return;
+
+      }
+
     };
 
 
@@ -538,6 +627,8 @@ function RoomPage() {
         error
       );
 
+      setConnected(false);
+
     };
 
 
@@ -553,6 +644,8 @@ function RoomPage() {
         `[WS CLOSED] code=${event.code}`
       );
 
+      setConnected(false);
+
     };
 
 
@@ -567,6 +660,29 @@ function RoomPage() {
     };
 
   }, [roomCode]);
+
+
+  // ==========================================================
+  // SEND MESSAGE
+  // ==========================================================
+
+  const sendMessage = (
+    message
+  ) => {
+
+    if (
+      websocketRef.current &&
+      websocketRef.current.readyState ===
+        WebSocket.OPEN
+    ) {
+
+      websocketRef.current.send(
+        JSON.stringify(message)
+      );
+
+    }
+
+  };
 
 
   // ==========================================================
@@ -641,8 +757,6 @@ function RoomPage() {
     );
 
 
-    // Draw locally immediately
-
     const canvas =
       canvasRef.current;
 
@@ -706,8 +820,6 @@ function RoomPage() {
       false;
 
 
-    // Need at least two points
-
     if (
       currentStroke.current.length < 2
     ) {
@@ -734,39 +846,15 @@ function RoomPage() {
     };
 
 
-    // --------------------------------------------------------
-    // Send to server
-    // --------------------------------------------------------
+    sendMessage({
 
-    if (
-      websocketRef.current &&
-      websocketRef.current.readyState ===
-        WebSocket.OPEN
-    ) {
+      type:
+        "stroke",
 
-      const message =
-        JSON.stringify({
+      stroke:
+        stroke
 
-          type:
-            "stroke",
-
-          stroke:
-            stroke
-
-        });
-
-
-      console.log(
-        "[WS SEND]",
-        message
-      );
-
-
-      websocketRef.current.send(
-        message
-      );
-
-    }
+    });
 
 
     currentStroke.current =
@@ -781,27 +869,12 @@ function RoomPage() {
 
   const undo = () => {
 
-    if (
-      websocketRef.current &&
-      websocketRef.current.readyState ===
-        WebSocket.OPEN
-    ) {
+    sendMessage({
 
-      console.log(
-        "[UNDO SEND]"
-      );
+      type:
+        "undo"
 
-
-      websocketRef.current.send(
-        JSON.stringify({
-
-          type:
-            "undo"
-
-        })
-      );
-
-    }
+    });
 
   };
 
@@ -812,27 +885,103 @@ function RoomPage() {
 
   const redo = () => {
 
-    if (
-      websocketRef.current &&
-      websocketRef.current.readyState ===
-        WebSocket.OPEN
-    ) {
+    sendMessage({
 
-      console.log(
-        "[REDO SEND]"
+      type:
+        "redo"
+
+    });
+
+  };
+
+
+  // ==========================================================
+  // DELETE MY STROKES
+  // ==========================================================
+
+  const deleteMyStrokes = () => {
+
+    const confirmed =
+      window.confirm(
+        "Delete all of your strokes from this room?"
       );
 
 
-      websocketRef.current.send(
-        JSON.stringify({
-
-          type:
-            "redo"
-
-        })
-      );
-
+    if (!confirmed) {
+      return;
     }
+
+
+    sendMessage({
+
+      type:
+        "delete_my_strokes"
+
+    });
+
+  };
+
+
+  // ==========================================================
+  // DELETE ALL STROKES
+  // ==========================================================
+
+  const deleteAllStrokes = () => {
+
+    if (!isHost) {
+      return;
+    }
+
+
+    const confirmed =
+      window.confirm(
+        "Delete ALL strokes from this room for everyone?"
+      );
+
+
+    if (!confirmed) {
+      return;
+    }
+
+
+    sendMessage({
+
+      type:
+        "delete_all_strokes"
+
+    });
+
+  };
+
+
+  // ==========================================================
+  // DELETE ROOM
+  // ==========================================================
+
+  const deleteRoom = () => {
+
+    if (!isHost) {
+      return;
+    }
+
+
+    const confirmed =
+      window.confirm(
+        "Delete this room permanently? Everyone will be removed and all strokes will be lost."
+      );
+
+
+    if (!confirmed) {
+      return;
+    }
+
+
+    sendMessage({
+
+      type:
+        "delete_room"
+
+    });
 
   };
 
@@ -860,26 +1009,120 @@ function RoomPage() {
       </p>
 
 
+      <p>
+
+        Status:{" "}
+
+        {connected
+          ? "Connected"
+          : "Disconnected"}
+
+      </p>
+
+
+      {isHost && (
+
+        <p>
+          👑 You are the room host
+        </p>
+
+      )}
+
+
+      {message && (
+
+        <p>
+          {message}
+        </p>
+
+      )}
+
+
+      {/* =====================================================
+          NORMAL USER CONTROLS
+          ===================================================== */}
+
       <div>
 
         <button
           onClick={undo}
         >
-          Undo
+          ↶ Undo
         </button>
 
 
         <button
           onClick={redo}
         >
-          Redo
+          ↷ Redo
+        </button>
+
+
+        <button
+          onClick={
+            deleteMyStrokes
+          }
+        >
+          🗑 Delete My Strokes
         </button>
 
       </div>
 
 
+      {/* =====================================================
+          HOST CONTROLS
+          ===================================================== */}
+
+      {isHost && (
+
+        <div
+          style={{
+            marginTop: "15px",
+            padding: "10px",
+            border: "1px solid #999"
+          }}
+        >
+
+          <strong>
+            Host Controls
+          </strong>
+
+
+          <br />
+          <br />
+
+
+          <button
+            onClick={
+              deleteAllStrokes
+            }
+          >
+            🗑 Delete All Strokes
+          </button>
+
+
+          <button
+            onClick={
+              deleteRoom
+            }
+            style={{
+              marginLeft: "10px"
+            }}
+          >
+            🚪 Delete Room
+          </button>
+
+        </div>
+
+      )}
+
+
       <br />
 
+
+      {/* =====================================================
+          CANVAS
+          ===================================================== */}
 
       <canvas
 
@@ -910,7 +1153,10 @@ function RoomPage() {
             "crosshair",
 
           display:
-            "block"
+            "block",
+
+          background:
+            "white"
 
         }}
 
@@ -936,18 +1182,24 @@ function App() {
       <Routes>
 
         <Route
+
           path="/"
+
           element={
             <HomePage />
           }
+
         />
 
 
         <Route
+
           path="/room/:roomCode"
+
           element={
             <RoomPage />
           }
+
         />
 
       </Routes>
