@@ -1,4 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState
+} from "react";
 
 import {
   BrowserRouter,
@@ -139,7 +143,8 @@ function HomePage() {
 
             body: JSON.stringify({
 
-              room_code: code
+              room_code:
+                code
 
             })
 
@@ -191,7 +196,9 @@ function HomePage() {
 
 
       <button
-        onClick={createRoom}
+        onClick={
+          createRoom
+        }
       >
         Create Room
       </button>
@@ -210,22 +217,26 @@ function HomePage() {
 
         value={roomCode}
 
-        onChange={(event) => {
+        onChange={
+          (event) => {
 
-          setRoomCode(
-            event.target.value
-              .toUpperCase()
-          );
+            setRoomCode(
+              event.target.value
+                .toUpperCase()
+            );
 
-          setMessage("");
+            setMessage("");
 
-        }}
+          }
+        }
 
       />
 
 
       <button
-        onClick={joinRoom}
+        onClick={
+          joinRoom
+        }
       >
         Join Room
       </button>
@@ -252,8 +263,9 @@ function HomePage() {
 
 function RoomPage() {
 
-  const { roomCode } =
-    useParams();
+  const {
+    roomCode
+  } = useParams();
 
 
   const navigate =
@@ -261,17 +273,57 @@ function RoomPage() {
 
 
   // ==========================================================
+  // USER
+  // ==========================================================
+
+  const userId =
+    useRef(
+      getUserId()
+    );
+
+
+  // ==========================================================
   // STATE
   // ==========================================================
 
-  const [isHost, setIsHost] =
-    useState(false);
+  const [
+    isHost,
+    setIsHost
+  ] = useState(false);
 
-  const [connected, setConnected] =
-    useState(false);
 
-  const [message, setMessage] =
-    useState("");
+  const [
+    connected,
+    setConnected
+  ] = useState(false);
+
+
+  const [
+    message,
+    setMessage
+  ] = useState("");
+
+
+  // ----------------------------------------------------------
+  // PERSONAL TOOL SETTINGS
+  // ----------------------------------------------------------
+
+  const [
+    tool,
+    setTool
+  ] = useState("pen");
+
+
+  const [
+    color,
+    setColor
+  ] = useState("#000000");
+
+
+  const [
+    size,
+    setSize
+  ] = useState(5);
 
 
   // ==========================================================
@@ -281,24 +333,25 @@ function RoomPage() {
   const canvasRef =
     useRef(null);
 
+
   const websocketRef =
     useRef(null);
 
-  const userId =
-    useRef(getUserId());
 
   const isDrawing =
     useRef(false);
 
+
   const currentStroke =
     useRef([]);
+
 
   const strokesRef =
     useRef([]);
 
 
   // ==========================================================
-  // DRAW ONE STROKE
+  // DRAW STROKE
   // ==========================================================
 
   const drawStroke = (
@@ -325,7 +378,7 @@ function RoomPage() {
 
 
     context.lineWidth =
-      stroke.size || 3;
+      stroke.size || 5;
 
 
     context.strokeStyle =
@@ -420,7 +473,7 @@ function RoomPage() {
 
 
   // ==========================================================
-  // CANVAS INITIALIZATION
+  // CANVAS SETUP
   // ==========================================================
 
   useEffect(() => {
@@ -429,9 +482,12 @@ function RoomPage() {
       canvasRef.current;
 
 
-    canvas.width = 1000;
+    canvas.width =
+      1000;
 
-    canvas.height = 600;
+
+    canvas.height =
+      600;
 
 
     redrawBoard();
@@ -456,14 +512,15 @@ function RoomPage() {
 
 
     // --------------------------------------------------------
-    // CONNECTED
+    // OPEN
     // --------------------------------------------------------
 
     websocket.onopen = () => {
 
       console.log(
-        `[WS CONNECTED] room=${roomCode}`
+        `[WS CONNECTED] ${roomCode}`
       );
+
 
       setConnected(true);
 
@@ -478,18 +535,20 @@ function RoomPage() {
       event
     ) => {
 
+      const data =
+        JSON.parse(
+          event.data
+        );
+
+
       console.log(
         "[WS RECEIVED]",
-        event.data
+        data
       );
 
 
-      const data =
-        JSON.parse(event.data);
-
-
       // ======================================================
-      // ROOM INFORMATION
+      // ROOM INFO
       // ======================================================
 
       if (
@@ -506,15 +565,6 @@ function RoomPage() {
 
 
         redrawBoard();
-
-
-        if (data.is_host) {
-
-          console.log(
-            "[HOST] This user is the room host."
-          );
-
-        }
 
 
         return;
@@ -537,13 +587,14 @@ function RoomPage() {
 
         redrawBoard();
 
+
         return;
 
       }
 
 
       // ======================================================
-      // COMPLETE BOARD STATE
+      // BOARD STATE
       // ======================================================
 
       if (
@@ -555,6 +606,7 @@ function RoomPage() {
 
 
         redrawBoard();
+
 
         return;
 
@@ -574,11 +626,14 @@ function RoomPage() {
         );
 
 
-        setTimeout(() => {
+        setTimeout(
+          () => {
 
-          navigate("/");
+            navigate("/");
 
-        }, 1200);
+          },
+          1000
+        );
 
 
         return;
@@ -600,14 +655,15 @@ function RoomPage() {
         );
 
 
-        setTimeout(() => {
+        setTimeout(
+          () => {
 
-          setMessage("");
+            setMessage("");
 
-        }, 2500);
+          },
+          2500
+        );
 
-
-        return;
 
       }
 
@@ -627,6 +683,7 @@ function RoomPage() {
         error
       );
 
+
       setConnected(false);
 
     };
@@ -641,8 +698,10 @@ function RoomPage() {
     ) => {
 
       console.log(
-        `[WS CLOSED] code=${event.code}`
+        "[WS CLOSED]",
+        event.code
       );
+
 
       setConnected(false);
 
@@ -673,11 +732,13 @@ function RoomPage() {
     if (
       websocketRef.current &&
       websocketRef.current.readyState ===
-        WebSocket.OPEN
+      WebSocket.OPEN
     ) {
 
       websocketRef.current.send(
-        JSON.stringify(message)
+        JSON.stringify(
+          message
+        )
       );
 
     }
@@ -693,6 +754,53 @@ function RoomPage() {
     event
   ) => {
 
+    const x =
+      event.nativeEvent.offsetX;
+
+
+    const y =
+      event.nativeEvent.offsetY;
+
+
+    // ========================================================
+    // ERASER
+    // ========================================================
+
+    if (
+      tool === "eraser"
+    ) {
+
+      const hitStroke =
+        findOwnStrokeAtPoint(
+          x,
+          y
+        );
+
+
+      if (hitStroke) {
+
+        sendMessage({
+
+          type:
+            "erase_stroke",
+
+          stroke_id:
+            hitStroke.id
+
+        });
+
+      }
+
+
+      return;
+
+    }
+
+
+    // ========================================================
+    // PEN
+    // ========================================================
+
     isDrawing.current =
       true;
 
@@ -700,13 +808,8 @@ function RoomPage() {
     currentStroke.current = [
 
       {
-
-        x:
-          event.nativeEvent.offsetX,
-
-        y:
-          event.nativeEvent.offsetY
-
+        x,
+        y
       }
 
     ];
@@ -721,6 +824,15 @@ function RoomPage() {
   const handleMouseMove = (
     event
   ) => {
+
+    if (
+      tool === "eraser"
+    ) {
+
+      return;
+
+    }
+
 
     if (
       !isDrawing.current
@@ -757,6 +869,10 @@ function RoomPage() {
     );
 
 
+    // --------------------------------------------------------
+    // Draw locally
+    // --------------------------------------------------------
+
     const canvas =
       canvasRef.current;
 
@@ -769,11 +885,11 @@ function RoomPage() {
 
 
     context.lineWidth =
-      3;
+      size;
 
 
     context.strokeStyle =
-      "#000000";
+      color;
 
 
     context.lineCap =
@@ -808,6 +924,15 @@ function RoomPage() {
   const handleMouseUp = () => {
 
     if (
+      tool === "eraser"
+    ) {
+
+      return;
+
+    }
+
+
+    if (
       !isDrawing.current
     ) {
 
@@ -838,10 +963,13 @@ function RoomPage() {
         currentStroke.current,
 
       color:
-        "#000000",
+        color,
 
       size:
-        3
+        size,
+
+      tool:
+        "pen"
 
     };
 
@@ -859,6 +987,190 @@ function RoomPage() {
 
     currentStroke.current =
       [];
+
+  };
+
+
+  // ==========================================================
+  // FIND OWN STROKE
+  // ==========================================================
+
+  const findOwnStrokeAtPoint = (
+    x,
+    y
+  ) => {
+
+    const eraserRadius =
+      Math.max(
+        10,
+        size * 2
+      );
+
+
+    // Search backwards so the visually topmost
+    // stroke gets selected first.
+
+    for (
+      let i =
+        strokesRef.current.length - 1;
+
+      i >= 0;
+
+      i--
+    ) {
+
+      const stroke =
+        strokesRef.current[i];
+
+
+      // ----------------------------------------------
+      // Ownership
+      // ----------------------------------------------
+
+      if (
+        stroke.user_id !==
+        userId.current
+      ) {
+
+        continue;
+
+      }
+
+
+      // ----------------------------------------------
+      // Check every segment
+      // ----------------------------------------------
+
+      const points =
+        stroke.points;
+
+
+      for (
+        let j = 1;
+        j < points.length;
+        j++
+      ) {
+
+        const p1 =
+          points[j - 1];
+
+
+        const p2 =
+          points[j];
+
+
+        const distance =
+          distanceToSegment(
+            x,
+            y,
+            p1.x,
+            p1.y,
+            p2.x,
+            p2.y
+          );
+
+
+        const strokeRadius =
+          (stroke.size || 5)
+          / 2;
+
+
+        if (
+          distance <=
+          eraserRadius +
+          strokeRadius
+        ) {
+
+          return stroke;
+
+        }
+
+      }
+
+    }
+
+
+    return null;
+
+  };
+
+
+  // ==========================================================
+  // DISTANCE FROM POINT TO LINE SEGMENT
+  // ==========================================================
+
+  const distanceToSegment = (
+    px,
+    py,
+    x1,
+    y1,
+    x2,
+    y2
+  ) => {
+
+    const dx =
+      x2 - x1;
+
+
+    const dy =
+      y2 - y1;
+
+
+    if (
+      dx === 0 &&
+      dy === 0
+    ) {
+
+      return Math.sqrt(
+        (
+          px - x1
+        ) ** 2 +
+        (
+          py - y1
+        ) ** 2
+      );
+
+    }
+
+
+    const t =
+      Math.max(
+        0,
+        Math.min(
+          1,
+          (
+            (px - x1) * dx +
+            (py - y1) * dy
+          ) /
+          (
+            dx * dx +
+            dy * dy
+          )
+        )
+      );
+
+
+    const closestX =
+      x1 +
+      t * dx;
+
+
+    const closestY =
+      y1 +
+      t * dy;
+
+
+    return Math.sqrt(
+
+      (
+        px - closestX
+      ) ** 2 +
+
+      (
+        py - closestY
+      ) ** 2
+
+    );
 
   };
 
@@ -903,7 +1215,7 @@ function RoomPage() {
 
     const confirmed =
       window.confirm(
-        "Delete all of your strokes from this room?"
+        "Delete all of your strokes?"
       );
 
 
@@ -923,7 +1235,7 @@ function RoomPage() {
 
 
   // ==========================================================
-  // DELETE ALL STROKES
+  // DELETE ALL
   // ==========================================================
 
   const deleteAllStrokes = () => {
@@ -935,7 +1247,7 @@ function RoomPage() {
 
     const confirmed =
       window.confirm(
-        "Delete ALL strokes from this room for everyone?"
+        "Delete ALL strokes for everyone?"
       );
 
 
@@ -967,7 +1279,7 @@ function RoomPage() {
 
     const confirmed =
       window.confirm(
-        "Delete this room permanently? Everyone will be removed and all strokes will be lost."
+        "Delete this room permanently?"
       );
 
 
@@ -987,12 +1299,36 @@ function RoomPage() {
 
 
   // ==========================================================
+  // COLOR PALETTE
+  // ==========================================================
+
+  const colors = [
+
+    "#000000",
+    "#ff0000",
+    "#ff7a00",
+    "#ffd000",
+    "#00a000",
+    "#00a8ff",
+    "#0055ff",
+    "#8000ff",
+    "#ff00aa",
+    "#ffffff"
+
+  ];
+
+
+  // ==========================================================
   // UI
   // ==========================================================
 
   return (
 
-    <div>
+    <div
+      style={{
+        padding: "20px"
+      }}
+    >
 
       <h1>
         Sketchers
@@ -1014,8 +1350,8 @@ function RoomPage() {
         Status:{" "}
 
         {connected
-          ? "Connected"
-          : "Disconnected"}
+          ? "🟢 Connected"
+          : "🔴 Disconnected"}
 
       </p>
 
@@ -1039,31 +1375,220 @@ function RoomPage() {
 
 
       {/* =====================================================
-          NORMAL USER CONTROLS
+          TOOLBAR
           ===================================================== */}
 
-      <div>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "10px",
+          flexWrap: "wrap",
+          padding: "12px",
+          border: "1px solid #ccc",
+          marginBottom: "15px"
+        }}
+      >
+
+        {/* ---------------------------------------------------
+            TOOL
+            --------------------------------------------------- */}
 
         <button
-          onClick={undo}
+
+          onClick={() =>
+            setTool("pen")
+          }
+
+          style={{
+
+            fontWeight:
+              tool === "pen"
+                ? "bold"
+                : "normal"
+
+          }}
+
+        >
+          ✏️ Pen
+        </button>
+
+
+        <button
+
+          onClick={() =>
+            setTool("eraser")
+          }
+
+          style={{
+
+            fontWeight:
+              tool === "eraser"
+                ? "bold"
+                : "normal"
+
+          }}
+
+        >
+          🧽 Eraser
+        </button>
+
+
+        {/* ---------------------------------------------------
+            COLOR
+            --------------------------------------------------- */}
+
+        <span>
+          Color:
+        </span>
+
+
+        {colors.map(
+          (paletteColor) => (
+
+            <button
+
+              key={
+                paletteColor
+              }
+
+              onClick={() => {
+
+                setColor(
+                  paletteColor
+                );
+
+                setTool("pen");
+
+              }}
+
+              title={
+                paletteColor
+              }
+
+              style={{
+
+                width: "25px",
+
+                height: "25px",
+
+                padding: 0,
+
+                border:
+                  color ===
+                  paletteColor
+                    ? "3px solid #333"
+                    : "1px solid #999",
+
+                backgroundColor:
+                  paletteColor
+
+              }}
+
+            />
+
+          )
+        )}
+
+
+        {/* ---------------------------------------------------
+            CUSTOM COLOR
+            --------------------------------------------------- */}
+
+        <input
+
+          type="color"
+
+          value={color}
+
+          onChange={
+            (event) => {
+
+              setColor(
+                event.target.value
+              );
+
+              setTool("pen");
+
+            }
+          }
+
+          title="Custom color"
+
+        />
+
+
+        {/* ---------------------------------------------------
+            SIZE
+            --------------------------------------------------- */}
+
+        <span>
+          Size:
+        </span>
+
+
+        <input
+
+          type="range"
+
+          min="1"
+
+          max="30"
+
+          value={size}
+
+          onChange={
+            (event) => {
+
+              setSize(
+                Number(
+                  event.target.value
+                )
+              );
+
+            }
+          }
+
+        />
+
+
+        <span>
+          {size}px
+        </span>
+
+
+        {/* ---------------------------------------------------
+            UNDO / REDO
+            --------------------------------------------------- */}
+
+        <button
+          onClick={
+            undo
+          }
         >
           ↶ Undo
         </button>
 
 
         <button
-          onClick={redo}
+          onClick={
+            redo
+          }
         >
           ↷ Redo
         </button>
 
+
+        {/* ---------------------------------------------------
+            DELETE MY STROKES
+            --------------------------------------------------- */}
 
         <button
           onClick={
             deleteMyStrokes
           }
         >
-          🗑 Delete My Strokes
+          🗑️ Delete My Strokes
         </button>
 
       </div>
@@ -1077,14 +1602,19 @@ function RoomPage() {
 
         <div
           style={{
-            marginTop: "15px",
-            padding: "10px",
-            border: "1px solid #999"
+
+            padding: "12px",
+
+            marginBottom: "15px",
+
+            border:
+              "1px solid #cc0000"
+
           }}
         >
 
           <strong>
-            Host Controls
+            👑 Host Controls
           </strong>
 
 
@@ -1097,17 +1627,20 @@ function RoomPage() {
               deleteAllStrokes
             }
           >
-            🗑 Delete All Strokes
+            🗑️ Delete All Strokes
           </button>
 
 
           <button
+
             onClick={
               deleteRoom
             }
+
             style={{
               marginLeft: "10px"
             }}
+
           >
             🚪 Delete Room
           </button>
@@ -1115,9 +1648,6 @@ function RoomPage() {
         </div>
 
       )}
-
-
-      <br />
 
 
       {/* =====================================================
@@ -1150,7 +1680,9 @@ function RoomPage() {
             "2px solid black",
 
           cursor:
-            "crosshair",
+            tool === "eraser"
+              ? "cell"
+              : "crosshair",
 
           display:
             "block",
