@@ -12,6 +12,8 @@ import {
   useParams
 } from "react-router-dom";
 
+import "./App.css";
+
 
 // ============================================================
 // USER ID
@@ -24,7 +26,6 @@ function getUserId() {
       "sketchers_user_id"
     );
 
-
   if (!userId) {
 
     userId =
@@ -34,9 +35,7 @@ function getUserId() {
       "sketchers_user_id",
       userId
     );
-
   }
-
 
   return userId;
 }
@@ -58,10 +57,6 @@ function HomePage() {
     useNavigate();
 
 
-  // ==========================================================
-  // CREATE ROOM
-  // ==========================================================
-
   const createRoom = async () => {
 
     try {
@@ -74,37 +69,26 @@ function HomePage() {
           }
         );
 
-
       const data =
         await response.json();
-
 
       if (data.success) {
 
         navigate(
           `/room/${data.room_code}`
         );
-
       }
 
-    }
-
-    catch (error) {
+    } catch (error) {
 
       console.error(error);
 
       setMessage(
-        "Could not connect to the server."
+        "Could not connect to Sketchers server."
       );
-
     }
-
   };
 
-
-  // ==========================================================
-  // JOIN ROOM
-  // ==========================================================
 
   const joinRoom = async () => {
 
@@ -117,11 +101,10 @@ function HomePage() {
     if (code.length !== 4) {
 
       setMessage(
-        "Enter a 4-character room code."
+        "Enter a valid 4-character room code."
       );
 
       return;
-
     }
 
 
@@ -135,19 +118,13 @@ function HomePage() {
             method: "POST",
 
             headers: {
-
               "Content-Type":
                 "application/json"
-
             },
 
             body: JSON.stringify({
-
-              room_code:
-                code
-
+              room_code: code
             })
-
           }
         );
 
@@ -159,11 +136,11 @@ function HomePage() {
       if (!response.ok) {
 
         setMessage(
-          data.detail
+          data.detail ||
+          "Room does not exist."
         );
 
         return;
-
       }
 
 
@@ -171,89 +148,108 @@ function HomePage() {
         `/room/${data.room_code}`
       );
 
-    }
-
-    catch (error) {
+    } catch (error) {
 
       console.error(error);
 
       setMessage(
-        "Could not connect to the server."
+        "Could not connect to Sketchers server."
       );
-
     }
-
   };
 
 
   return (
 
-    <div>
+    <div className="home-page">
 
-      <h1>
-        Sketchers
-      </h1>
+      <div className="home-card">
 
+        <div className="logo-mark">
+          ✦
+        </div>
 
-      <button
-        onClick={
-          createRoom
-        }
-      >
-        Create Room
-      </button>
+        <h1>
+          Sketchers
+        </h1>
 
-
-      <hr />
-
-
-      <input
-
-        type="text"
-
-        placeholder="Enter room code"
-
-        maxLength={4}
-
-        value={roomCode}
-
-        onChange={
-          (event) => {
-
-            setRoomCode(
-              event.target.value
-                .toUpperCase()
-            );
-
-            setMessage("");
-
-          }
-        }
-
-      />
-
-
-      <button
-        onClick={
-          joinRoom
-        }
-      >
-        Join Room
-      </button>
-
-
-      {message && (
-
-        <p>
-          {message}
+        <p className="home-subtitle">
+          Draw together. Create together.
         </p>
 
-      )}
+
+        <button
+          className="primary-button create-button"
+          onClick={createRoom}
+        >
+          <span>＋</span>
+          Create Room
+        </button>
+
+
+        <div className="divider">
+          <span>or</span>
+        </div>
+
+
+        <div className="join-section">
+
+          <input
+            className="room-input"
+            type="text"
+            placeholder="ROOM CODE"
+            maxLength={4}
+            value={roomCode}
+            onChange={(event) => {
+
+              setRoomCode(
+                event.target.value
+                  .toUpperCase()
+                  .replace(
+                    /[^A-Z0-9]/g,
+                    ""
+                  )
+              );
+
+              setMessage("");
+            }}
+            onKeyDown={(event) => {
+
+              if (
+                event.key === "Enter"
+              ) {
+
+                joinRoom();
+
+              }
+
+            }}
+          />
+
+
+          <button
+            className="secondary-button"
+            onClick={joinRoom}
+          >
+            Join Room
+          </button>
+
+        </div>
+
+
+        {message && (
+
+          <div className="error-message">
+            {message}
+          </div>
+
+        )}
+
+      </div>
 
     </div>
 
   );
-
 }
 
 
@@ -272,63 +268,39 @@ function RoomPage() {
     useNavigate();
 
 
-  // ==========================================================
-  // USER
-  // ==========================================================
-
   const userId =
     useRef(
       getUserId()
     );
 
 
-  // ==========================================================
-  // STATE
-  // ==========================================================
-
-  const [
-    isHost,
-    setIsHost
-  ] = useState(false);
+  const [isHost, setIsHost] =
+    useState(false);
 
 
-  const [
-    connected,
-    setConnected
-  ] = useState(false);
+  const [connected, setConnected] =
+    useState(false);
 
 
-  const [
-    message,
-    setMessage
-  ] = useState("");
+  const [message, setMessage] =
+    useState("");
 
 
-  // ----------------------------------------------------------
-  // PERSONAL TOOL SETTINGS
-  // ----------------------------------------------------------
-
-  const [
-    tool,
-    setTool
-  ] = useState("pen");
+  const [tool, setTool] =
+    useState("pen");
 
 
-  const [
-    color,
-    setColor
-  ] = useState("#000000");
+  const [color, setColor] =
+    useState("#171717");
 
 
-  const [
-    size,
-    setSize
-  ] = useState(5);
+  const [size, setSize] =
+    useState(5);
 
 
-  // ==========================================================
-  // REFS
-  // ==========================================================
+  const [showHostMenu, setShowHostMenu] =
+    useState(false);
+
 
   const canvasRef =
     useRef(null);
@@ -336,6 +308,10 @@ function RoomPage() {
 
   const websocketRef =
     useRef(null);
+
+
+  const strokesRef =
+    useRef([]);
 
 
   const isDrawing =
@@ -346,8 +322,32 @@ function RoomPage() {
     useRef([]);
 
 
-  const strokesRef =
-    useRef([]);
+  // ==========================================================
+  // COLORS
+  // ==========================================================
+
+  const colors = [
+
+    "#171717",
+    "#ffffff",
+
+    "#ef4444",
+    "#f97316",
+    "#f59e0b",
+    "#eab308",
+
+    "#22c55e",
+    "#10b981",
+    "#06b6d4",
+
+    "#3b82f6",
+    "#6366f1",
+    "#8b5cf6",
+
+    "#ec4899",
+    "#f43f5e"
+
+  ];
 
 
   // ==========================================================
@@ -366,7 +366,6 @@ function RoomPage() {
     ) {
 
       return;
-
     }
 
 
@@ -376,18 +375,14 @@ function RoomPage() {
 
     context.beginPath();
 
-
     context.lineWidth =
       stroke.size || 5;
 
-
     context.strokeStyle =
-      stroke.color || "#000000";
-
+      stroke.color || "#171717";
 
     context.lineCap =
       "round";
-
 
     context.lineJoin =
       "round";
@@ -419,7 +414,7 @@ function RoomPage() {
 
 
   // ==========================================================
-  // REDRAW BOARD
+  // REDRAW
   // ==========================================================
 
   const redrawBoard = () => {
@@ -473,7 +468,7 @@ function RoomPage() {
 
 
   // ==========================================================
-  // CANVAS SETUP
+  // CANVAS INITIALIZATION
   // ==========================================================
 
   useEffect(() => {
@@ -483,11 +478,11 @@ function RoomPage() {
 
 
     canvas.width =
-      1000;
+      1200;
 
 
     canvas.height =
-      600;
+      700;
 
 
     redrawBoard();
@@ -511,25 +506,16 @@ function RoomPage() {
       websocket;
 
 
-    // --------------------------------------------------------
-    // OPEN
-    // --------------------------------------------------------
-
     websocket.onopen = () => {
 
       console.log(
-        `[WS CONNECTED] ${roomCode}`
+        "[WS CONNECTED]"
       );
-
 
       setConnected(true);
 
     };
 
-
-    // --------------------------------------------------------
-    // MESSAGE
-    // --------------------------------------------------------
 
     websocket.onmessage = (
       event
@@ -547,9 +533,9 @@ function RoomPage() {
       );
 
 
-      // ======================================================
+      // ------------------------------------------------------
       // ROOM INFO
-      // ======================================================
+      // ------------------------------------------------------
 
       if (
         data.type === "room_info"
@@ -568,13 +554,12 @@ function RoomPage() {
 
 
         return;
-
       }
 
 
-      // ======================================================
+      // ------------------------------------------------------
       // NEW STROKE
-      // ======================================================
+      // ------------------------------------------------------
 
       if (
         data.type === "stroke"
@@ -589,13 +574,12 @@ function RoomPage() {
 
 
         return;
-
       }
 
 
-      // ======================================================
+      // ------------------------------------------------------
       // BOARD STATE
-      // ======================================================
+      // ------------------------------------------------------
 
       if (
         data.type === "board_state"
@@ -609,21 +593,33 @@ function RoomPage() {
 
 
         return;
-
       }
 
 
-      // ======================================================
+      // ------------------------------------------------------
       // ROOM DELETED
-      // ======================================================
+      // ------------------------------------------------------
 
       if (
         data.type === "room_deleted"
       ) {
 
-        setMessage(
-          "The host deleted this room."
-        );
+        if (
+          data.reason ===
+          "inactivity"
+        ) {
+
+          setMessage(
+            "This room was deleted because of inactivity."
+          );
+
+        } else {
+
+          setMessage(
+            "The host deleted this room."
+          );
+
+        }
 
 
         setTimeout(
@@ -632,18 +628,17 @@ function RoomPage() {
             navigate("/");
 
           },
-          1000
+          1500
         );
 
 
         return;
-
       }
 
 
-      // ======================================================
+      // ------------------------------------------------------
       // PERMISSION DENIED
-      // ======================================================
+      // ------------------------------------------------------
 
       if (
         data.type ===
@@ -651,7 +646,7 @@ function RoomPage() {
       ) {
 
         setMessage(
-          "You do not have permission to perform that action."
+          "You don't have permission to perform that action."
         );
 
 
@@ -664,15 +659,10 @@ function RoomPage() {
           2500
         );
 
-
       }
 
     };
 
-
-    // --------------------------------------------------------
-    // ERROR
-    // --------------------------------------------------------
 
     websocket.onerror = (
       error
@@ -683,34 +673,21 @@ function RoomPage() {
         error
       );
 
-
       setConnected(false);
 
     };
 
 
-    // --------------------------------------------------------
-    // CLOSE
-    // --------------------------------------------------------
-
-    websocket.onclose = (
-      event
-    ) => {
+    websocket.onclose = () => {
 
       console.log(
-        "[WS CLOSED]",
-        event.code
+        "[WS CLOSED]"
       );
-
 
       setConnected(false);
 
     };
 
-
-    // --------------------------------------------------------
-    // CLEANUP
-    // --------------------------------------------------------
 
     return () => {
 
@@ -762,9 +739,9 @@ function RoomPage() {
       event.nativeEvent.offsetY;
 
 
-    // ========================================================
+    // --------------------------------------------------------
     // ERASER
-    // ========================================================
+    // --------------------------------------------------------
 
     if (
       tool === "eraser"
@@ -793,13 +770,12 @@ function RoomPage() {
 
 
       return;
-
     }
 
 
-    // ========================================================
+    // --------------------------------------------------------
     // PEN
-    // ========================================================
+    // --------------------------------------------------------
 
     isDrawing.current =
       true;
@@ -830,7 +806,6 @@ function RoomPage() {
     ) {
 
       return;
-
     }
 
 
@@ -839,7 +814,6 @@ function RoomPage() {
     ) {
 
       return;
-
     }
 
 
@@ -869,10 +843,6 @@ function RoomPage() {
     );
 
 
-    // --------------------------------------------------------
-    // Draw locally
-    // --------------------------------------------------------
-
     const canvas =
       canvasRef.current;
 
@@ -883,18 +853,14 @@ function RoomPage() {
 
     context.beginPath();
 
-
     context.lineWidth =
       size;
-
 
     context.strokeStyle =
       color;
 
-
     context.lineCap =
       "round";
-
 
     context.lineJoin =
       "round";
@@ -928,7 +894,6 @@ function RoomPage() {
     ) {
 
       return;
-
     }
 
 
@@ -937,7 +902,6 @@ function RoomPage() {
     ) {
 
       return;
-
     }
 
 
@@ -953,25 +917,7 @@ function RoomPage() {
         [];
 
       return;
-
     }
-
-
-    const stroke = {
-
-      points:
-        currentStroke.current,
-
-      color:
-        color,
-
-      size:
-        size,
-
-      tool:
-        "pen"
-
-    };
 
 
     sendMessage({
@@ -979,8 +925,21 @@ function RoomPage() {
       type:
         "stroke",
 
-      stroke:
-        stroke
+      stroke: {
+
+        points:
+          currentStroke.current,
+
+        color:
+          color,
+
+        size:
+          size,
+
+        tool:
+          "pen"
+
+      }
 
     });
 
@@ -1007,9 +966,6 @@ function RoomPage() {
       );
 
 
-    // Search backwards so the visually topmost
-    // stroke gets selected first.
-
     for (
       let i =
         strokesRef.current.length - 1;
@@ -1023,23 +979,14 @@ function RoomPage() {
         strokesRef.current[i];
 
 
-      // ----------------------------------------------
-      // Ownership
-      // ----------------------------------------------
-
       if (
         stroke.user_id !==
         userId.current
       ) {
 
         continue;
-
       }
 
-
-      // ----------------------------------------------
-      // Check every segment
-      // ----------------------------------------------
 
       const points =
         stroke.points;
@@ -1096,7 +1043,7 @@ function RoomPage() {
 
 
   // ==========================================================
-  // DISTANCE FROM POINT TO LINE SEGMENT
+  // DISTANCE TO SEGMENT
   // ==========================================================
 
   const distanceToSegment = (
@@ -1111,7 +1058,6 @@ function RoomPage() {
     const dx =
       x2 - x1;
 
-
     const dy =
       y2 - y1;
 
@@ -1122,12 +1068,10 @@ function RoomPage() {
     ) {
 
       return Math.sqrt(
-        (
-          px - x1
-        ) ** 2 +
-        (
-          py - y1
-        ) ** 2
+
+        (px - x1) ** 2 +
+        (py - y1) ** 2
+
       );
 
     }
@@ -1138,10 +1082,12 @@ function RoomPage() {
         0,
         Math.min(
           1,
+
           (
             (px - x1) * dx +
             (py - y1) * dy
           ) /
+
           (
             dx * dx +
             dy * dy
@@ -1151,24 +1097,17 @@ function RoomPage() {
 
 
     const closestX =
-      x1 +
-      t * dx;
+      x1 + t * dx;
 
 
     const closestY =
-      y1 +
-      t * dy;
+      y1 + t * dy;
 
 
     return Math.sqrt(
 
-      (
-        px - closestX
-      ) ** 2 +
-
-      (
-        py - closestY
-      ) ** 2
+      (px - closestX) ** 2 +
+      (py - closestY) ** 2
 
     );
 
@@ -1182,10 +1121,7 @@ function RoomPage() {
   const undo = () => {
 
     sendMessage({
-
-      type:
-        "undo"
-
+      type: "undo"
     });
 
   };
@@ -1198,10 +1134,7 @@ function RoomPage() {
   const redo = () => {
 
     sendMessage({
-
-      type:
-        "redo"
-
+      type: "redo"
     });
 
   };
@@ -1213,23 +1146,23 @@ function RoomPage() {
 
   const deleteMyStrokes = () => {
 
-    const confirmed =
+    setShowHostMenu(false);
+
+
+    if (
       window.confirm(
         "Delete all of your strokes?"
-      );
+      )
+    ) {
 
+      sendMessage({
 
-    if (!confirmed) {
-      return;
+        type:
+          "delete_my_strokes"
+
+      });
+
     }
-
-
-    sendMessage({
-
-      type:
-        "delete_my_strokes"
-
-    });
 
   };
 
@@ -1240,28 +1173,23 @@ function RoomPage() {
 
   const deleteAllStrokes = () => {
 
-    if (!isHost) {
-      return;
-    }
+    setShowHostMenu(false);
 
 
-    const confirmed =
+    if (
       window.confirm(
         "Delete ALL strokes for everyone?"
-      );
+      )
+    ) {
 
+      sendMessage({
 
-    if (!confirmed) {
-      return;
+        type:
+          "delete_all_strokes"
+
+      });
+
     }
-
-
-    sendMessage({
-
-      type:
-        "delete_all_strokes"
-
-    });
 
   };
 
@@ -1272,273 +1200,284 @@ function RoomPage() {
 
   const deleteRoom = () => {
 
-    if (!isHost) {
-      return;
-    }
+    setShowHostMenu(false);
 
 
-    const confirmed =
+    if (
       window.confirm(
         "Delete this room permanently?"
-      );
+      )
+    ) {
 
+      sendMessage({
 
-    if (!confirmed) {
-      return;
+        type:
+          "delete_room"
+
+      });
+
     }
-
-
-    sendMessage({
-
-      type:
-        "delete_room"
-
-    });
 
   };
 
 
   // ==========================================================
-  // COLOR PALETTE
+  // COPY ROOM CODE
   // ==========================================================
 
-  const colors = [
+  const copyRoomCode = async () => {
 
-    "#000000",
-    "#ff0000",
-    "#ff7a00",
-    "#ffd000",
-    "#00a000",
-    "#00a8ff",
-    "#0055ff",
-    "#8000ff",
-    "#ff00aa",
-    "#ffffff"
+    try {
 
-  ];
+      await navigator.clipboard.writeText(
+        roomCode
+      );
+
+
+      setMessage(
+        "Room code copied!"
+      );
+
+
+      setTimeout(
+        () => {
+
+          setMessage("");
+
+        },
+        1500
+      );
+
+    } catch {
+
+      setMessage(
+        "Unable to copy room code."
+      );
+
+    }
+
+  };
 
 
   // ==========================================================
-  // UI
+  // ROOM UI
   // ==========================================================
 
   return (
 
-    <div
-      style={{
-        padding: "20px"
-      }}
-    >
+    <div className="room-page">
 
-      <h1>
-        Sketchers
-      </h1>
+      {/* ====================================================
+          HEADER
+          ==================================================== */}
 
+      <header className="top-header">
 
-      <h2>
-        Room: {roomCode}
-      </h2>
+        <div className="brand">
 
+          <div className="brand-icon">
+            ✦
+          </div>
 
-      <p>
-        User ID: {userId.current}
-      </p>
+          <span>
+            Sketchers
+          </span>
 
-
-      <p>
-
-        Status:{" "}
-
-        {connected
-          ? "🟢 Connected"
-          : "🔴 Disconnected"}
-
-      </p>
+        </div>
 
 
-      {isHost && (
+        <div className="room-info">
 
-        <p>
-          👑 You are the room host
-        </p>
-
-      )}
+          <span className="room-label">
+            ROOM
+          </span>
 
 
-      {message && (
+          <button
+            className="room-code"
+            onClick={
+              copyRoomCode
+            }
+            title="Copy room code"
+          >
+            {roomCode}
+          </button>
 
-        <p>
-          {message}
-        </p>
 
-      )}
+          {isHost && (
+
+            <span className="host-badge">
+              HOST
+            </span>
+
+          )}
+
+        </div>
 
 
-      {/* =====================================================
+        <div className="connection-status">
+
+          <span
+            className={
+              connected
+                ? "status-dot connected"
+                : "status-dot disconnected"
+            }
+          />
+
+          <span>
+            {connected
+              ? "Synced"
+              : "Disconnected"}
+          </span>
+
+        </div>
+
+      </header>
+
+
+      {/* ====================================================
           TOOLBAR
-          ===================================================== */}
+          ==================================================== */}
 
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "10px",
-          flexWrap: "wrap",
-          padding: "12px",
-          border: "1px solid #ccc",
-          marginBottom: "15px"
-        }}
-      >
+      <div className="toolbar">
 
-        {/* ---------------------------------------------------
-            TOOL
-            --------------------------------------------------- */}
+        {/* Tools */}
 
-        <button
+        <div className="toolbar-group">
 
-          onClick={() =>
-            setTool("pen")
-          }
-
-          style={{
-
-            fontWeight:
+          <button
+            className={
               tool === "pen"
-                ? "bold"
-                : "normal"
+                ? "tool-button active"
+                : "tool-button"
+            }
+            onClick={() =>
+              setTool("pen")
+            }
+            title="Pen"
+          >
+            ✏️
+          </button>
 
-          }}
 
-        >
-          ✏️ Pen
-        </button>
-
-
-        <button
-
-          onClick={() =>
-            setTool("eraser")
-          }
-
-          style={{
-
-            fontWeight:
+          <button
+            className={
               tool === "eraser"
-                ? "bold"
-                : "normal"
+                ? "tool-button active"
+                : "tool-button"
+            }
+            onClick={() =>
+              setTool("eraser")
+            }
+            title="Stroke eraser"
+          >
+            🧽
+          </button>
 
-          }}
-
-        >
-          🧽 Eraser
-        </button>
-
-
-        {/* ---------------------------------------------------
-            COLOR
-            --------------------------------------------------- */}
-
-        <span>
-          Color:
-        </span>
+        </div>
 
 
-        {colors.map(
-          (paletteColor) => (
+        <div className="toolbar-separator" />
 
-            <button
 
-              key={
-                paletteColor
-              }
+        {/* Colors */}
 
-              onClick={() => {
+        <div className="color-palette">
 
-                setColor(
+          {colors.map(
+            (paletteColor) => (
+
+              <button
+
+                key={
                   paletteColor
-                );
+                }
 
-                setTool("pen");
-
-              }}
-
-              title={
-                paletteColor
-              }
-
-              style={{
-
-                width: "25px",
-
-                height: "25px",
-
-                padding: 0,
-
-                border:
+                className={
                   color ===
                   paletteColor
-                    ? "3px solid #333"
-                    : "1px solid #999",
+                    ? "color-swatch selected"
+                    : "color-swatch"
+                }
 
-                backgroundColor:
+                style={{
+                  backgroundColor:
+                    paletteColor
+                }}
+
+                onClick={() => {
+
+                  setColor(
+                    paletteColor
+                  );
+
+                  setTool(
+                    "pen"
+                  );
+
+                }}
+
+                title={
                   paletteColor
+                }
 
-              }}
+              />
 
-            />
-
-          )
-        )}
+            )
+          )}
 
 
-        {/* ---------------------------------------------------
-            CUSTOM COLOR
-            --------------------------------------------------- */}
+          <input
 
-        <input
+            className="custom-color"
 
-          type="color"
+            type="color"
 
-          value={color}
+            value={color}
 
-          onChange={
-            (event) => {
+            onChange={(event) => {
 
               setColor(
                 event.target.value
               );
 
-              setTool("pen");
+              setTool(
+                "pen"
+              );
 
-            }
-          }
+            }}
 
-          title="Custom color"
+            title="Custom color"
 
-        />
+          />
 
-
-        {/* ---------------------------------------------------
-            SIZE
-            --------------------------------------------------- */}
-
-        <span>
-          Size:
-        </span>
+        </div>
 
 
-        <input
+        <div className="toolbar-separator" />
 
-          type="range"
 
-          min="1"
+        {/* Brush size */}
 
-          max="30"
+        <div className="size-control">
 
-          value={size}
+          <span className="size-label">
+            Size
+          </span>
 
-          onChange={
-            (event) => {
+
+          <input
+
+            type="range"
+
+            min="1"
+
+            max="30"
+
+            value={size}
+
+            onChange={(event) => {
 
               setSize(
                 Number(
@@ -1546,153 +1485,175 @@ function RoomPage() {
                 )
               );
 
-            }
-          }
+            }}
 
-        />
-
-
-        <span>
-          {size}px
-        </span>
+          />
 
 
-        {/* ---------------------------------------------------
-            UNDO / REDO
-            --------------------------------------------------- */}
+          <span className="size-value">
+            {size}
+          </span>
+
+        </div>
+
+
+        <div className="toolbar-separator" />
+
+
+        {/* Undo / Redo */}
+
+        <div className="toolbar-group">
+
+          <button
+            className="action-button"
+            onClick={undo}
+            title="Undo"
+          >
+            ↶
+          </button>
+
+
+          <button
+            className="action-button"
+            onClick={redo}
+            title="Redo"
+          >
+            ↷
+          </button>
+
+        </div>
+
+
+        {/* Spacer */}
+
+        <div className="toolbar-spacer" />
+
+
+        {/* My strokes */}
 
         <button
-          onClick={
-            undo
-          }
-        >
-          ↶ Undo
-        </button>
-
-
-        <button
-          onClick={
-            redo
-          }
-        >
-          ↷ Redo
-        </button>
-
-
-        {/* ---------------------------------------------------
-            DELETE MY STROKES
-            --------------------------------------------------- */}
-
-        <button
+          className="toolbar-text-button"
           onClick={
             deleteMyStrokes
           }
         >
-          🗑️ Delete My Strokes
+          My Strokes
         </button>
+
+
+        {/* Host menu */}
+
+        {isHost && (
+
+          <div className="host-menu-container">
+
+            <button
+
+              className={
+                showHostMenu
+                  ? "host-button open"
+                  : "host-button"
+              }
+
+              onClick={() =>
+                setShowHostMenu(
+                  !showHostMenu
+                )
+              }
+
+            >
+              👑 Host ▾
+            </button>
+
+
+            {showHostMenu && (
+
+              <div className="host-menu">
+
+                <div className="host-menu-title">
+                  Host Controls
+                </div>
+
+
+                <button
+                  onClick={
+                    deleteAllStrokes
+                  }
+                >
+                  🗑️ Delete All Strokes
+                </button>
+
+
+                <button
+                  className="danger"
+                  onClick={
+                    deleteRoom
+                  }
+                >
+                  🚪 Delete Room
+                </button>
+
+              </div>
+
+            )}
+
+          </div>
+
+        )}
 
       </div>
 
 
-      {/* =====================================================
-          HOST CONTROLS
-          ===================================================== */}
+      {/* ====================================================
+          MESSAGE
+          ==================================================== */}
 
-      {isHost && (
+      {message && (
 
-        <div
-          style={{
+        <div className="floating-message">
 
-            padding: "12px",
-
-            marginBottom: "15px",
-
-            border:
-              "1px solid #cc0000"
-
-          }}
-        >
-
-          <strong>
-            👑 Host Controls
-          </strong>
-
-
-          <br />
-          <br />
-
-
-          <button
-            onClick={
-              deleteAllStrokes
-            }
-          >
-            🗑️ Delete All Strokes
-          </button>
-
-
-          <button
-
-            onClick={
-              deleteRoom
-            }
-
-            style={{
-              marginLeft: "10px"
-            }}
-
-          >
-            🚪 Delete Room
-          </button>
+          {message}
 
         </div>
 
       )}
 
 
-      {/* =====================================================
+      {/* ====================================================
           CANVAS
-          ===================================================== */}
+          ==================================================== */}
 
-      <canvas
+      <main className="canvas-area">
 
-        ref={canvasRef}
+        <div className="canvas-wrapper">
 
-        onMouseDown={
-          handleMouseDown
-        }
+          <canvas
 
-        onMouseMove={
-          handleMouseMove
-        }
+            ref={
+              canvasRef
+            }
 
-        onMouseUp={
-          handleMouseUp
-        }
+            onMouseDown={
+              handleMouseDown
+            }
 
-        onMouseLeave={
-          handleMouseUp
-        }
+            onMouseMove={
+              handleMouseMove
+            }
 
-        style={{
+            onMouseUp={
+              handleMouseUp
+            }
 
-          border:
-            "2px solid black",
+            onMouseLeave={
+              handleMouseUp
+            }
 
-          cursor:
-            tool === "eraser"
-              ? "cell"
-              : "crosshair",
+          />
 
-          display:
-            "block",
+        </div>
 
-          background:
-            "white"
-
-        }}
-
-      />
+      </main>
 
     </div>
 
@@ -1714,24 +1675,18 @@ function App() {
       <Routes>
 
         <Route
-
           path="/"
-
           element={
             <HomePage />
           }
-
         />
 
 
         <Route
-
           path="/room/:roomCode"
-
           element={
             <RoomPage />
           }
-
         />
 
       </Routes>

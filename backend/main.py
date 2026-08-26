@@ -1,6 +1,9 @@
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+import asyncio
+import os
 import random
 import string
 from datetime import datetime, timezone
@@ -23,6 +26,32 @@ app.add_middleware(
 
 
 # ============================================================
+# CONFIGURATION
+# ============================================================
+
+# Production:
+#   600 seconds = 10 minutes
+#
+# Testing:
+#   PowerShell:
+#   $env:SKETCHERS_INACTIVITY_SECONDS="30"
+#
+# Then start the server.
+#
+# If the variable is not provided, it defaults to 600.
+
+INACTIVITY_SECONDS = int(
+    os.getenv(
+        "SKETCHERS_INACTIVITY_SECONDS",
+        "600"
+    )
+)
+
+
+CHECK_INTERVAL = 5
+
+
+# ============================================================
 # ROOM STORAGE
 # ============================================================
 
@@ -36,6 +65,10 @@ room_strokes = {}
 
 room_user_history = {}
 
+room_last_activity = {}
+
+room_monitor_task = None
+
 
 # ============================================================
 # REQUEST MODEL
@@ -46,7 +79,32 @@ class RoomRequest(BaseModel):
 
 
 # ============================================================
-# HELPERS
+# TIME HELPER
+# ============================================================
+
+def current_time():
+
+    return datetime.now(
+        timezone.utc
+    )
+
+
+def current_time_string():
+
+    return current_time().isoformat()
+
+
+def mark_room_activity(room_code):
+
+    if room_code in rooms:
+
+        room_last_activity[
+            room_code
+        ] = current_time()
+
+
+# ============================================================
+# ROOM CODE
 # ============================================================
 
 def generate_room_code():
@@ -64,11 +122,96 @@ def generate_room_code():
     )
 
 
-def current_time():
+# ============================================================
+# INACTIVITY MONITOR
+# ============================================================
 
-    return datetime.now(
-        timezone.utc
-    ).isoformat()
+async def inactivity_monitor():
+
+    print(
+        f"[INACTIVITY MONITOR] "
+        f"Timeout = {INACTIVITY_SECONDS} seconds"
+    )
+
+
+    while True:
+
+        await asyncio.sleep(
+            CHECK_INTERVAL
+        )
+
+
+        now = current_time()
+
+
+        for room_code in list(rooms):
+
+            last_activity = (
+                room_last_activity.get(
+                    room_code,
+                    now
+                )
+            )
+
+
+            inactive_seconds = (
+                now - last_activity
+            ).total_seconds()
+
+
+            if (
+                inactive_seconds
+                >= INACTIVITY_SECONDS
+            ):
+
+                print(
+                    f"[INACTIVITY] "
+                    f"Room {room_code} "
+                    f"has been inactive for "
+                    f"{int(inactive_seconds)} seconds"
+                )
+
+
+                await delete_room(
+                    room_code,
+                    reason="inactivity"
+                )
+
+
+# ============================================================
+# STARTUP
+# ============================================================
+
+@app.on_event("startup")
+async def startup_event():
+
+    global room_monitor_task
+
+    room_monitor_task = asyncio.create_task(
+        inactivity_monitor()
+    )
+
+
+# ============================================================
+# SHUTDOWN
+# ============================================================
+
+@app.on_event("shutdown")
+async def shutdown_event():
+
+    global room_monitor_task
+
+    if room_monitor_task:
+
+        room_monitor_task.cancel()
+
+        try:
+
+            await room_monitor_task
+
+        except asyncio.CancelledError:
+
+            pass
 
 
 # ============================================================
@@ -79,7 +222,9 @@ def current_time():
 def home():
 
     return {
-        "message": "Sketchers backend is running"
+        "message": "Sketchers backend is running",
+        "inactivity_timeout_seconds":
+            INACTIVITY_SECONDS
     }
 
 
@@ -98,25 +243,49 @@ def create_room():
             break
 
 
-    rooms.add(room_code)
+    rooms.add(
+        room_code
+    )
 
-    room_hosts[room_code] = None
 
-    room_connections[room_code] = {}
+    room_hosts[
+        room_code
+    ] = None
 
-    room_strokes[room_code] = []
 
-    room_user_history[room_code] = {}
+    room_connections[
+        room_code
+    ] = {}
+
+
+    room_strokes[
+        room_code
+    ] = []
+
+
+    room_user_history[
+        room_code
+    ] = {}
+
+
+    room_last_activity[
+        room_code
+    ] = current_time()
 
 
     print(
-        f"[ROOM CREATED] {room_code}"
+        f"[ROOM CREATED] "
+        f"{room_code}"
     )
 
 
     return {
+
         "success": True,
-        "room_code": room_code
+
+        "room_code":
+            room_code
+
     }
 
 
@@ -144,9 +313,20 @@ def join_room(
         )
 
 
+    # Joining counts as activity.
+
+    mark_room_activity(
+        room_code
+    )
+
+
     return {
+
         "success": True,
-        "room_code": room_code
+
+        "room_code":
+            room_code
+
     }
 
 
@@ -168,7 +348,9 @@ async def broadcast_board_state(
             "board_state",
 
         "strokes":
-            room_strokes[room_code]
+            room_strokes[
+                room_code
+            ]
 
     }
 
@@ -261,7 +443,8 @@ async def broadcast_message(
 # ============================================================
 
 async def delete_room(
-    room_code
+    room_code,
+    reason="host"
 ):
 
     if room_code not in rooms:
@@ -269,40 +452,47 @@ async def delete_room(
 
 
     print(
-        f"[ROOM DELETED] {room_code}"
+        f"[ROOM DELETED] "
+        f"{room_code} "
+        f"reason={reason}"
     )
 
 
     message = {
 
         "type":
-            "room_deleted"
+            "room_deleted",
+
+        "reason":
+            reason
 
     }
 
 
-    for (
-        user_id,
-        websocket
-    ) in list(
-        room_connections[
-            room_code
-        ].items()
-    ):
+    if room_code in room_connections:
 
-        try:
+        for (
+            user_id,
+            websocket
+        ) in list(
+            room_connections[
+                room_code
+            ].items()
+        ):
 
-            await websocket.send_json(
-                message
-            )
+            try:
 
-            await websocket.close(
-                code=1000
-            )
+                await websocket.send_json(
+                    message
+                )
 
-        except Exception:
+                await websocket.close(
+                    code=1000
+                )
 
-            pass
+            except Exception:
+
+                pass
 
 
     room_connections.pop(
@@ -310,20 +500,30 @@ async def delete_room(
         None
     )
 
+
     room_strokes.pop(
         room_code,
         None
     )
+
 
     room_user_history.pop(
         room_code,
         None
     )
 
+
     room_hosts.pop(
         room_code,
         None
     )
+
+
+    room_last_activity.pop(
+        room_code,
+        None
+    )
+
 
     rooms.discard(
         room_code
@@ -364,19 +564,33 @@ async def websocket_endpoint(
 
 
     # ========================================================
-    # ACCEPT CONNECTION
+    # ACCEPT
     # ========================================================
 
     await websocket.accept()
 
 
     # ========================================================
+    # ACTIVITY
+    # ========================================================
+
+    mark_room_activity(
+        room_code
+    )
+
+
+    # ========================================================
     # ASSIGN HOST
     # ========================================================
 
-    if room_hosts[room_code] is None:
+    if room_hosts[
+        room_code
+    ] is None:
 
-        room_hosts[room_code] = user_id
+        room_hosts[
+            room_code
+        ] = user_id
+
 
         print(
             f"[HOST ASSIGNED] "
@@ -386,8 +600,9 @@ async def websocket_endpoint(
 
 
     is_host = (
-        room_hosts[room_code]
-        == user_id
+        room_hosts[
+            room_code
+        ] == user_id
     )
 
 
@@ -444,13 +659,17 @@ async def websocket_endpoint(
             "room_info",
 
         "host_id":
-            room_hosts[room_code],
+            room_hosts[
+                room_code
+            ],
 
         "is_host":
             is_host,
 
         "strokes":
-            room_strokes[room_code]
+            room_strokes[
+                room_code
+            ]
 
     })
 
@@ -470,13 +689,20 @@ async def websocket_endpoint(
 
 
             # =================================================
-            # NEW STROKE
+            # STROKE
             # =================================================
 
             if message_type == "stroke":
 
+                mark_room_activity(
+                    room_code
+                )
+
+
                 stroke = (
-                    message.get("stroke")
+                    message.get(
+                        "stroke"
+                    )
                 )
 
 
@@ -484,47 +710,47 @@ async def websocket_endpoint(
                     continue
 
 
-                # ------------------------------------------------
-                # Server assigns ownership
-                # ------------------------------------------------
-
-                stroke["user_id"] = user_id
+                stroke["user_id"] = (
+                    user_id
+                )
 
 
                 stroke["id"] = (
+
                     f"{user_id}-"
                     f"{random.randint(100000, 999999)}"
+
                 )
 
 
                 stroke["created_at"] = (
-                    current_time()
+                    current_time_string()
                 )
 
 
-                # ------------------------------------------------
-                # Basic validation/defaults
-                # ------------------------------------------------
-
                 if "color" not in stroke:
-                    stroke["color"] = "#000000"
+
+                    stroke["color"] = (
+                        "#000000"
+                    )
 
 
                 if "size" not in stroke:
-                    stroke["size"] = 3
+
+                    stroke["size"] = 5
 
 
                 if "tool" not in stroke:
-                    stroke["tool"] = "pen"
+
+                    stroke["tool"] = (
+                        "pen"
+                    )
 
 
                 if "points" not in stroke:
+
                     continue
 
-
-                # ------------------------------------------------
-                # Store stroke
-                # ------------------------------------------------
 
                 room_strokes[
                     room_code
@@ -533,24 +759,27 @@ async def websocket_endpoint(
                 )
 
 
-                # ------------------------------------------------
-                # User history
-                # ------------------------------------------------
-
-                room_user_history[
-                    room_code
-                ][user_id][
-                    "undo"
-                ].append(
-                    stroke
+                history = (
+                    room_user_history[
+                        room_code
+                    ][user_id]
                 )
 
 
-                room_user_history[
-                    room_code
-                ][user_id][
-                    "redo"
-                ].clear()
+                # An ordinary drawing action.
+
+                history["undo"].append({
+
+                    "action":
+                        "add",
+
+                    "stroke":
+                        stroke
+
+                })
+
+
+                history["redo"].clear()
 
 
                 print(
@@ -561,10 +790,6 @@ async def websocket_endpoint(
                     f"size={stroke['size']}"
                 )
 
-
-                # ------------------------------------------------
-                # Broadcast
-                # ------------------------------------------------
 
                 await broadcast_message(
 
@@ -589,6 +814,11 @@ async def websocket_endpoint(
 
             elif message_type == "undo":
 
+                mark_room_activity(
+                    room_code
+                )
+
+
                 history = (
                     room_user_history[
                         room_code
@@ -597,39 +827,88 @@ async def websocket_endpoint(
 
 
                 if not history["undo"]:
+
                     continue
 
 
-                stroke = (
+                action = (
                     history["undo"].pop()
                 )
 
 
-                history["redo"].append(
-                    stroke
+                stroke = (
+                    action["stroke"]
                 )
 
 
-                room_strokes[
-                    room_code
-                ] = [
+                # ---------------------------------------------
+                # Undo ADD
+                #
+                # A normal stroke disappears.
+                # ---------------------------------------------
 
-                    existing
+                if action["action"] == "add":
 
-                    for existing
-                    in room_strokes[
+                    room_strokes[
                         room_code
+                    ] = [
+
+                        existing
+
+                        for existing
+                        in room_strokes[
+                            room_code
+                        ]
+
+                        if existing["id"]
+                        != stroke["id"]
+
                     ]
 
-                    if existing["id"]
-                    != stroke["id"]
 
-                ]
+                # ---------------------------------------------
+                # Undo ERASE
+                #
+                # An erased stroke comes back.
+                # ---------------------------------------------
+
+                elif action["action"] == "erase":
+
+                    exists = any(
+
+                        existing["id"]
+                        == stroke["id"]
+
+                        for existing
+                        in room_strokes[
+                            room_code
+                        ]
+
+                    )
+
+
+                    if not exists:
+
+                        room_strokes[
+                            room_code
+                        ].append(
+                            stroke
+                        )
+
+
+                # ---------------------------------------------
+                # Put action into REDO
+                # ---------------------------------------------
+
+                history["redo"].append(
+                    action
+                )
 
 
                 print(
                     f"[UNDO] "
                     f"user={user_id} "
+                    f"action={action['action']} "
                     f"stroke={stroke['id']}"
                 )
 
@@ -645,6 +924,11 @@ async def websocket_endpoint(
 
             elif message_type == "redo":
 
+                mark_room_activity(
+                    room_code
+                )
+
+
                 history = (
                     room_user_history[
                         room_code
@@ -653,29 +937,84 @@ async def websocket_endpoint(
 
 
                 if not history["redo"]:
+
                     continue
 
 
-                stroke = (
+                action = (
                     history["redo"].pop()
                 )
 
 
-                history["undo"].append(
-                    stroke
+                stroke = (
+                    action["stroke"]
                 )
 
 
-                room_strokes[
-                    room_code
-                ].append(
-                    stroke
+                # ---------------------------------------------
+                # Redo ADD
+                #
+                # Bring normal stroke back.
+                # ---------------------------------------------
+
+                if action["action"] == "add":
+
+                    exists = any(
+
+                        existing["id"]
+                        == stroke["id"]
+
+                        for existing
+                        in room_strokes[
+                            room_code
+                        ]
+
+                    )
+
+
+                    if not exists:
+
+                        room_strokes[
+                            room_code
+                        ].append(
+                            stroke
+                        )
+
+
+                # ---------------------------------------------
+                # Redo ERASE
+                #
+                # Remove erased stroke again.
+                # ---------------------------------------------
+
+                elif action["action"] == "erase":
+
+                    room_strokes[
+                        room_code
+                    ] = [
+
+                        existing
+
+                        for existing
+                        in room_strokes[
+                            room_code
+                        ]
+
+                        if existing["id"]
+                        != stroke["id"]
+
+                    ]
+
+
+                history["undo"].append(
+                    action
                 )
 
 
                 print(
                     f"[REDO] "
                     f"user={user_id} "
+                    f"action={action['action']} "
                     f"stroke={stroke['id']}"
                 )
 
@@ -691,6 +1030,11 @@ async def websocket_endpoint(
 
             elif message_type == "erase_stroke":
 
+                mark_room_activity(
+                    room_code
+                )
+
+
                 stroke_id = (
                     message.get(
                         "stroke_id"
@@ -699,12 +1043,9 @@ async def websocket_endpoint(
 
 
                 if not stroke_id:
+
                     continue
 
-
-                # ------------------------------------------------
-                # Find stroke
-                # ------------------------------------------------
 
                 target_stroke = None
 
@@ -721,11 +1062,13 @@ async def websocket_endpoint(
 
 
                 if target_stroke is None:
+
                     continue
 
 
                 # ------------------------------------------------
-                # OWNERSHIP CHECK
+                # IMPORTANT:
+                # User can only erase their own stroke.
                 # ------------------------------------------------
 
                 if (
@@ -736,8 +1079,7 @@ async def websocket_endpoint(
                     print(
                         f"[ERASE DENIED] "
                         f"user={user_id} "
-                        f"attempted to erase "
-                        f"stroke belonging to "
+                        f"stroke_owner="
                         f"{target_stroke['user_id']}"
                     )
 
@@ -757,7 +1099,7 @@ async def websocket_endpoint(
 
 
                 # ------------------------------------------------
-                # Remove from board
+                # Remove stroke from board
                 # ------------------------------------------------
 
                 room_strokes[
@@ -777,13 +1119,6 @@ async def websocket_endpoint(
                 ]
 
 
-                # ------------------------------------------------
-                # Remove from user's undo history
-                #
-                # The erased stroke should no longer be
-                # resurrected by Undo.
-                # ------------------------------------------------
-
                 history = (
                     room_user_history[
                         room_code
@@ -791,36 +1126,33 @@ async def websocket_endpoint(
                 )
 
 
-                history["undo"] = [
+                # ------------------------------------------------
+                # IMPORTANT:
+                #
+                # Erasing is now an UNDOABLE ACTION.
+                #
+                # We DO NOT delete the history.
+                # ------------------------------------------------
 
-                    stroke
+                history["undo"].append({
 
-                    for stroke
-                    in history["undo"]
+                    "action":
+                        "erase",
 
-                    if stroke["id"]
-                    != stroke_id
+                    "stroke":
+                        target_stroke
 
-                ]
+                })
 
 
-                history["redo"] = [
-
-                    stroke
-
-                    for stroke
-                    in history["redo"]
-
-                    if stroke["id"]
-                    != stroke_id
-
-                ]
+                history["redo"].clear()
 
 
                 print(
                     f"[ERASE] "
                     f"user={user_id} "
-                    f"stroke={stroke_id}"
+                    f"stroke={stroke_id} "
+                    f"(undoable)"
                 )
 
 
@@ -834,6 +1166,11 @@ async def websocket_endpoint(
             # =================================================
 
             elif message_type == "delete_my_strokes":
+
+                mark_room_activity(
+                    room_code
+                )
+
 
                 history = (
                     room_user_history[
@@ -859,6 +1196,8 @@ async def websocket_endpoint(
                 ]
 
 
+                # This is intentionally destructive.
+
                 history["undo"].clear()
 
                 history["redo"].clear()
@@ -881,6 +1220,11 @@ async def websocket_endpoint(
 
             elif message_type == "delete_all_strokes":
 
+                mark_room_activity(
+                    room_code
+                )
+
+
                 if room_hosts[
                     room_code
                 ] != user_id:
@@ -894,6 +1238,7 @@ async def websocket_endpoint(
                             "delete_all_strokes"
 
                     })
+
 
                     continue
 
@@ -909,9 +1254,13 @@ async def websocket_endpoint(
                     ].values()
                 ):
 
-                    history["undo"].clear()
+                    history[
+                        "undo"
+                    ].clear()
 
-                    history["redo"].clear()
+                    history[
+                        "redo"
+                    ].clear()
 
 
                 print(
@@ -931,6 +1280,11 @@ async def websocket_endpoint(
 
             elif message_type == "delete_room":
 
+                mark_room_activity(
+                    room_code
+                )
+
+
                 if room_hosts[
                     room_code
                 ] != user_id:
@@ -945,18 +1299,13 @@ async def websocket_endpoint(
 
                     })
 
+
                     continue
 
 
-                print(
-                    f"[DELETE ROOM] "
-                    f"host={user_id} "
-                    f"room={room_code}"
-                )
-
-
                 await delete_room(
-                    room_code
+                    room_code,
+                    reason="host"
                 )
 
 
@@ -973,6 +1322,7 @@ async def websocket_endpoint(
 
 
         if room_code not in room_connections:
+
             return
 
 
