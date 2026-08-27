@@ -22,9 +22,7 @@ import "./App.css";
 function getUserId() {
 
   let userId =
-    sessionStorage.getItem(
-      "sketchers_user_id"
-    );
+    sessionStorage.getItem("sketchers_user_id");
 
   if (!userId) {
 
@@ -64,9 +62,7 @@ function HomePage() {
       const response =
         await fetch(
           "http://localhost:8000/create-room",
-          {
-            method: "POST"
-          }
+          { method: "POST" }
         );
 
       const data =
@@ -74,9 +70,8 @@ function HomePage() {
 
       if (data.success) {
 
-        navigate(
-          `/room/${data.room_code}`
-        );
+        navigate(`/room/${data.room_code}`);
+
       }
 
     } catch (error) {
@@ -86,7 +81,9 @@ function HomePage() {
       setMessage(
         "Could not connect to Sketchers server."
       );
+
     }
+
   };
 
 
@@ -114,7 +111,6 @@ function HomePage() {
         await fetch(
           "http://localhost:8000/join-room",
           {
-
             method: "POST",
 
             headers: {
@@ -155,7 +151,9 @@ function HomePage() {
       setMessage(
         "Could not connect to Sketchers server."
       );
+
     }
+
   };
 
 
@@ -169,9 +167,7 @@ function HomePage() {
           ✦
         </div>
 
-        <h1>
-          Sketchers
-        </h1>
+        <h1>Sketchers</h1>
 
         <p className="home-subtitle">
           Draw together. Create together.
@@ -212,15 +208,12 @@ function HomePage() {
               );
 
               setMessage("");
+
             }}
             onKeyDown={(event) => {
 
-              if (
-                event.key === "Enter"
-              ) {
-
+              if (event.key === "Enter") {
                 joinRoom();
-
               }
 
             }}
@@ -259,44 +252,51 @@ function HomePage() {
 
 function RoomPage() {
 
-  const {
-    roomCode
-  } = useParams();
-
+  const { roomCode } =
+    useParams();
 
   const navigate =
     useNavigate();
 
-
   const userId =
-    useRef(
-      getUserId()
-    );
+    useRef(getUserId());
 
 
   const [isHost, setIsHost] =
     useState(false);
 
-
   const [connected, setConnected] =
     useState(false);
-
 
   const [message, setMessage] =
     useState("");
 
-
   const [tool, setTool] =
     useState("pen");
-
 
   const [color, setColor] =
     useState("#171717");
 
-
   const [size, setSize] =
     useState(5);
 
+  const [paletteStyle, setPaletteStyle] =
+    useState("circle");
+
+  const [showColorPicker, setShowColorPicker] =
+    useState(false);
+
+  const [hue, setHue] =
+    useState(250);
+
+  const [saturation, setSaturation] =
+    useState(0.85);
+
+  const [value, setValue] =
+    useState(0.95);
+
+  const [showShapeMenu, setShowShapeMenu] =
+    useState(false);
 
   const [showHostMenu, setShowHostMenu] =
     useState(false);
@@ -305,53 +305,246 @@ function RoomPage() {
   const canvasRef =
     useRef(null);
 
-
   const websocketRef =
     useRef(null);
-
 
   const strokesRef =
     useRef([]);
 
-
   const isDrawing =
     useRef(false);
 
-
-  const currentStroke =
+  const currentPoints =
     useRef([]);
 
+  const lastPoint =
+    useRef(null);
 
-  // ==========================================================
-  // COLORS
-  // ==========================================================
+  const erasedThisDrag =
+    useRef(new Set());
+
+  const colorAreaRef =
+    useRef(null);
+
 
   const colors = [
-
     "#171717",
     "#ffffff",
-
     "#ef4444",
     "#f97316",
     "#f59e0b",
     "#eab308",
-
     "#22c55e",
     "#10b981",
     "#06b6d4",
-
     "#3b82f6",
     "#6366f1",
     "#8b5cf6",
-
     "#ec4899",
     "#f43f5e"
+  ];
 
+
+  const shapes = [
+    {
+      id: "line",
+      label: "Line",
+      icon: "╱"
+    },
+    {
+      id: "rectangle",
+      label: "Rectangle",
+      icon: "▭"
+    },
+    {
+      id: "square",
+      label: "Square",
+      icon: "□"
+    },
+    {
+      id: "ellipse",
+      label: "Oval",
+      icon: "⬭"
+    },
+    {
+      id: "circle",
+      label: "Circle",
+      icon: "○"
+    }
   ];
 
 
   // ==========================================================
-  // DRAW STROKE
+  // COLOR PICKER HELPERS
+  // ==========================================================
+
+  const hsvToHex = (h, s, v) => {
+
+    const c = v * s;
+    const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+    const m = v - c;
+
+    let r = 0;
+    let g = 0;
+    let b = 0;
+
+    if (h < 60) {
+      r = c; g = x;
+    } else if (h < 120) {
+      r = x; g = c;
+    } else if (h < 180) {
+      g = c; b = x;
+    } else if (h < 240) {
+      g = x; b = c;
+    } else if (h < 300) {
+      r = x; b = c;
+    } else {
+      r = c; b = x;
+    }
+
+    const toHex = (channel) =>
+      Math.round((channel + m) * 255)
+        .toString(16)
+        .padStart(2, "0");
+
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+  };
+
+
+  const hexToHsv = (hex) => {
+
+    const clean = hex.replace("#", "");
+    const r = parseInt(clean.slice(0, 2), 16) / 255;
+    const g = parseInt(clean.slice(2, 4), 16) / 255;
+    const b = parseInt(clean.slice(4, 6), 16) / 255;
+
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const d = max - min;
+
+    let h = 0;
+
+    if (d !== 0) {
+      if (max === r) {
+        h = 60 * (((g - b) / d) % 6);
+      } else if (max === g) {
+        h = 60 * ((b - r) / d + 2);
+      } else {
+        h = 60 * ((r - g) / d + 4);
+      }
+    }
+
+    if (h < 0) h += 360;
+
+    return {
+      h,
+      s: max === 0 ? 0 : d / max,
+      v: max
+    };
+  };
+
+
+  const setColorFromHex = (hex) => {
+
+    const hsv = hexToHsv(hex);
+
+    setColor(hex);
+    setHue(hsv.h);
+    setSaturation(hsv.s);
+    setValue(hsv.v);
+  };
+
+
+  const pickFromColorArea = (event) => {
+
+    const area = colorAreaRef.current;
+
+    if (!area) return;
+
+    const rect = area.getBoundingClientRect();
+
+    const x = Math.max(
+      0,
+      Math.min(1, (event.clientX - rect.left) / rect.width)
+    );
+
+    const y = Math.max(
+      0,
+      Math.min(1, (event.clientY - rect.top) / rect.height)
+    );
+
+    const nextSaturation = x;
+    const nextValue = 1 - y;
+    const nextColor = hsvToHex(
+      hue,
+      nextSaturation,
+      nextValue
+    );
+
+    setSaturation(nextSaturation);
+    setValue(nextValue);
+    setColor(nextColor);
+    setTool("pen");
+  };
+
+
+  const handleColorAreaPointerDown = (event) => {
+    event.currentTarget.setPointerCapture(event.pointerId);
+    pickFromColorArea(event);
+  };
+
+
+  const handleColorAreaPointerMove = (event) => {
+    if (event.buttons === 1) {
+      pickFromColorArea(event);
+    }
+  };
+
+
+  const handleHueChange = (event) => {
+
+    const nextHue = Number(event.target.value);
+    setHue(nextHue);
+    setColor(
+      hsvToHex(
+        nextHue,
+        saturation,
+        value
+      )
+    );
+    setTool("pen");
+  };
+
+
+  // ==========================================================
+  // CANVAS COORDINATES
+  // ==========================================================
+
+  const getCanvasPoint = (event) => {
+
+    const canvas =
+      canvasRef.current;
+
+    const rect =
+      canvas.getBoundingClientRect();
+
+    return {
+
+      x:
+        (event.clientX - rect.left) *
+        (canvas.width / rect.width),
+
+      y:
+        (event.clientY - rect.top) *
+        (canvas.height / rect.height)
+
+    };
+
+  };
+
+
+  // ==========================================================
+  // DRAW A STROKE
   // ==========================================================
 
   const drawStroke = (
@@ -364,7 +557,6 @@ function RoomPage() {
       !stroke.points ||
       stroke.points.length < 2
     ) {
-
       return;
     }
 
@@ -414,14 +606,13 @@ function RoomPage() {
 
 
   // ==========================================================
-  // REDRAW
+  // REDRAW BOARD
   // ==========================================================
 
   const redrawBoard = () => {
 
     const canvas =
       canvasRef.current;
-
 
     if (!canvas) {
       return;
@@ -442,7 +633,6 @@ function RoomPage() {
 
     context.fillStyle =
       "#ffffff";
-
 
     context.fillRect(
       0,
@@ -468,6 +658,186 @@ function RoomPage() {
 
 
   // ==========================================================
+  // PREVIEW SHAPE
+  // ==========================================================
+
+  const getShapePoints = (
+    start,
+    end,
+    shape
+  ) => {
+
+    let x1 = start.x;
+    let y1 = start.y;
+
+    let x2 = end.x;
+    let y2 = end.y;
+
+
+    // --------------------------------------------------------
+    // LINE
+    // --------------------------------------------------------
+
+    if (shape === "line") {
+
+      return [
+        { x: x1, y: y1 },
+        { x: x2, y: y2 }
+      ];
+
+    }
+
+
+    // --------------------------------------------------------
+    // SQUARE / CIRCLE
+    // --------------------------------------------------------
+
+    if (
+      shape === "square" ||
+      shape === "circle"
+    ) {
+
+      const dx =
+        x2 - x1;
+
+      const dy =
+        y2 - y1;
+
+      const side =
+        Math.max(
+          Math.abs(dx),
+          Math.abs(dy)
+        );
+
+
+      x2 =
+        x1 +
+        (dx < 0 ? -side : side);
+
+      y2 =
+        y1 +
+        (dy < 0 ? -side : side);
+
+    }
+
+
+    // --------------------------------------------------------
+    // RECTANGLE / SQUARE
+    // --------------------------------------------------------
+
+    if (
+      shape === "rectangle" ||
+      shape === "square"
+    ) {
+
+      return [
+
+        { x: x1, y: y1 },
+        { x: x2, y: y1 },
+        { x: x2, y: y2 },
+        { x: x1, y: y2 },
+        { x: x1, y: y1 }
+
+      ];
+
+    }
+
+
+    // --------------------------------------------------------
+    // ELLIPSE / CIRCLE
+    // --------------------------------------------------------
+
+    if (
+      shape === "ellipse" ||
+      shape === "circle"
+    ) {
+
+      const centerX =
+        (x1 + x2) / 2;
+
+      const centerY =
+        (y1 + y2) / 2;
+
+      const radiusX =
+        Math.abs(x2 - x1) / 2;
+
+      const radiusY =
+        Math.abs(y2 - y1) / 2;
+
+      const points = [];
+
+      const segments = 64;
+
+
+      for (
+        let i = 0;
+        i <= segments;
+        i++
+      ) {
+
+        const angle =
+          (Math.PI * 2 * i) /
+          segments;
+
+
+        points.push({
+
+          x:
+            centerX +
+            radiusX *
+            Math.cos(angle),
+
+          y:
+            centerY +
+            radiusY *
+            Math.sin(angle)
+
+        });
+
+      }
+
+
+      return points;
+
+    }
+
+
+    return [];
+
+  };
+
+
+  // ==========================================================
+  // DRAW PREVIEW
+  // ==========================================================
+
+  const drawPreview = (
+    points
+  ) => {
+
+    const canvas =
+      canvasRef.current;
+
+    const context =
+      canvas.getContext("2d");
+
+
+    redrawBoard();
+
+
+    drawStroke(
+      context,
+      {
+        points,
+        color,
+        size
+      }
+    );
+
+  };
+
+
+  // ==========================================================
   // CANVAS INITIALIZATION
   // ==========================================================
 
@@ -477,12 +847,8 @@ function RoomPage() {
       canvasRef.current;
 
 
-    canvas.width =
-      1200;
-
-
-    canvas.height =
-      700;
+    canvas.width = 1200;
+    canvas.height = 700;
 
 
     redrawBoard();
@@ -508,23 +874,17 @@ function RoomPage() {
 
     websocket.onopen = () => {
 
-      console.log(
-        "[WS CONNECTED]"
-      );
+      console.log("[WS CONNECTED]");
 
       setConnected(true);
 
     };
 
 
-    websocket.onmessage = (
-      event
-    ) => {
+    websocket.onmessage = (event) => {
 
       const data =
-        JSON.parse(
-          event.data
-        );
+        JSON.parse(event.data);
 
 
       console.log(
@@ -532,10 +892,6 @@ function RoomPage() {
         data
       );
 
-
-      // ------------------------------------------------------
-      // ROOM INFO
-      // ------------------------------------------------------
 
       if (
         data.type === "room_info"
@@ -545,21 +901,14 @@ function RoomPage() {
           data.is_host
         );
 
-
         strokesRef.current =
           data.strokes || [];
 
-
         redrawBoard();
-
 
         return;
       }
 
-
-      // ------------------------------------------------------
-      // NEW STROKE
-      // ------------------------------------------------------
 
       if (
         data.type === "stroke"
@@ -569,17 +918,11 @@ function RoomPage() {
           data.stroke
         );
 
-
         redrawBoard();
-
 
         return;
       }
 
-
-      // ------------------------------------------------------
-      // BOARD STATE
-      // ------------------------------------------------------
 
       if (
         data.type === "board_state"
@@ -588,61 +931,34 @@ function RoomPage() {
         strokesRef.current =
           data.strokes || [];
 
-
         redrawBoard();
-
 
         return;
       }
 
-
-      // ------------------------------------------------------
-      // ROOM DELETED
-      // ------------------------------------------------------
 
       if (
         data.type === "room_deleted"
       ) {
 
-        if (
-          data.reason ===
-          "inactivity"
-        ) {
-
-          setMessage(
-            "This room was deleted because of inactivity."
-          );
-
-        } else {
-
-          setMessage(
-            "The host deleted this room."
-          );
-
-        }
+        setMessage(
+          data.reason === "inactivity"
+            ? "This room was deleted because of inactivity."
+            : "The host deleted this room."
+        );
 
 
         setTimeout(
-          () => {
-
-            navigate("/");
-
-          },
+          () => navigate("/"),
           1500
         );
-
 
         return;
       }
 
 
-      // ------------------------------------------------------
-      // PERMISSION DENIED
-      // ------------------------------------------------------
-
       if (
-        data.type ===
-        "permission_denied"
+        data.type === "permission_denied"
       ) {
 
         setMessage(
@@ -651,11 +967,7 @@ function RoomPage() {
 
 
         setTimeout(
-          () => {
-
-            setMessage("");
-
-          },
+          () => setMessage(""),
           2500
         );
 
@@ -664,9 +976,7 @@ function RoomPage() {
     };
 
 
-    websocket.onerror = (
-      error
-    ) => {
+    websocket.onerror = (error) => {
 
       console.error(
         "[WS ERROR]",
@@ -702,9 +1012,7 @@ function RoomPage() {
   // SEND MESSAGE
   // ==========================================================
 
-  const sendMessage = (
-    message
-  ) => {
+  const sendMessage = (message) => {
 
     if (
       websocketRef.current &&
@@ -713,8 +1021,110 @@ function RoomPage() {
     ) {
 
       websocketRef.current.send(
-        JSON.stringify(
-          message
+        JSON.stringify(message)
+      );
+
+    }
+
+  };
+
+
+  // ==========================================================
+  // DRAG ERASER
+  // ==========================================================
+
+  const eraseAtPoint = (x, y) => {
+
+    const hitStroke =
+      findOwnStrokeAtPoint(x, y);
+
+    if (!hitStroke) return;
+
+    if (erasedThisDrag.current.has(hitStroke.id)) {
+      return;
+    }
+
+    erasedThisDrag.current.add(hitStroke.id);
+
+    sendMessage({
+      type: "erase_stroke",
+      stroke_id: hitStroke.id
+    });
+  };
+
+
+  // ==========================================================
+  // MOUSE DOWN
+  // ==========================================================
+
+  const handleMouseDown = (event) => {
+
+    const point =
+      getCanvasPoint(event);
+
+
+    // --------------------------------------------------------
+    // EYEDROPPER
+    // --------------------------------------------------------
+
+    if (tool === "picker") {
+
+      const canvas = canvasRef.current;
+      const context = canvas.getContext("2d", {
+        willReadFrequently: true
+      });
+
+      const pixel = context.getImageData(
+        Math.floor(point.x),
+        Math.floor(point.y),
+        1,
+        1
+      ).data;
+
+      const picked = `#${[pixel[0], pixel[1], pixel[2]]
+        .map(value => value.toString(16).padStart(2, "0"))
+        .join("")}`;
+
+      setColorFromHex(picked);
+      setTool("pen");
+      setMessage(`Picked ${picked.toUpperCase()}`);
+      setTimeout(() => setMessage(""), 1200);
+      return;
+    }
+
+
+    // --------------------------------------------------------
+    // ERASER
+    // --------------------------------------------------------
+
+    if (tool === "eraser") {
+
+      isDrawing.current = true;
+      erasedThisDrag.current.clear();
+      eraseAtPoint(point.x, point.y);
+      return;
+    }
+
+
+    isDrawing.current =
+      true;
+
+
+    currentPoints.current = [
+      point
+    ];
+
+    lastPoint.current =
+      point;
+
+
+    if (tool !== "pen") {
+
+      drawPreview(
+        getShapePoints(
+          point,
+          point,
+          tool
         )
       );
 
@@ -724,161 +1134,95 @@ function RoomPage() {
 
 
   // ==========================================================
-  // MOUSE DOWN
-  // ==========================================================
-
-  const handleMouseDown = (
-    event
-  ) => {
-
-    const x =
-      event.nativeEvent.offsetX;
-
-
-    const y =
-      event.nativeEvent.offsetY;
-
-
-    // --------------------------------------------------------
-    // ERASER
-    // --------------------------------------------------------
-
-    if (
-      tool === "eraser"
-    ) {
-
-      const hitStroke =
-        findOwnStrokeAtPoint(
-          x,
-          y
-        );
-
-
-      if (hitStroke) {
-
-        sendMessage({
-
-          type:
-            "erase_stroke",
-
-          stroke_id:
-            hitStroke.id
-
-        });
-
-      }
-
-
-      return;
-    }
-
-
-    // --------------------------------------------------------
-    // PEN
-    // --------------------------------------------------------
-
-    isDrawing.current =
-      true;
-
-
-    currentStroke.current = [
-
-      {
-        x,
-        y
-      }
-
-    ];
-
-  };
-
-
-  // ==========================================================
   // MOUSE MOVE
   // ==========================================================
 
-  const handleMouseMove = (
-    event
-  ) => {
+  const handleMouseMove = (event) => {
 
-    if (
-      tool === "eraser"
-    ) {
+    if (!isDrawing.current) {
+      return;
+    }
+
+
+    const point =
+      getCanvasPoint(event);
+
+    if (tool === "eraser") {
+      eraseAtPoint(point.x, point.y);
+      return;
+    }
+
+    lastPoint.current =
+      point;
+
+
+    // --------------------------------------------------------
+    // FREEHAND PEN
+    // --------------------------------------------------------
+
+    if (tool === "pen") {
+
+      const points =
+        currentPoints.current;
+
+
+      const previous =
+        points[points.length - 1];
+
+
+      points.push(point);
+
+
+      const canvas =
+        canvasRef.current;
+
+      const context =
+        canvas.getContext("2d");
+
+
+      context.beginPath();
+
+      context.lineWidth =
+        size;
+
+      context.strokeStyle =
+        color;
+
+      context.lineCap =
+        "round";
+
+      context.lineJoin =
+        "round";
+
+
+      context.moveTo(
+        previous.x,
+        previous.y
+      );
+
+      context.lineTo(
+        point.x,
+        point.y
+      );
+
+      context.stroke();
+
 
       return;
     }
 
 
-    if (
-      !isDrawing.current
-    ) {
+    // --------------------------------------------------------
+    // SHAPE PREVIEW
+    // --------------------------------------------------------
 
-      return;
-    }
-
-
-    const point = {
-
-      x:
-        event.nativeEvent.offsetX,
-
-      y:
-        event.nativeEvent.offsetY
-
-    };
-
-
-    const points =
-      currentStroke.current;
-
-
-    const previous =
-      points[
-        points.length - 1
-      ];
-
-
-    points.push(
-      point
+    drawPreview(
+      getShapePoints(
+        currentPoints.current[0],
+        point,
+        tool
+      )
     );
-
-
-    const canvas =
-      canvasRef.current;
-
-
-    const context =
-      canvas.getContext("2d");
-
-
-    context.beginPath();
-
-    context.lineWidth =
-      size;
-
-    context.strokeStyle =
-      color;
-
-    context.lineCap =
-      "round";
-
-    context.lineJoin =
-      "round";
-
-
-    context.moveTo(
-      previous.x,
-      previous.y
-    );
-
-
-    context.lineTo(
-      point.x,
-      point.y
-    );
-
-
-    context.stroke();
 
   };
 
@@ -887,71 +1231,87 @@ function RoomPage() {
   // MOUSE UP
   // ==========================================================
 
-  const handleMouseUp = () => {
+  const handleMouseUp = (event) => {
 
-    if (
-      tool === "eraser"
-    ) {
-
+    if (tool === "eraser") {
+      isDrawing.current = false;
+      erasedThisDrag.current.clear();
       return;
     }
 
-
-    if (
-      !isDrawing.current
-    ) {
-
+    if (!isDrawing.current) {
       return;
     }
 
+    const endPoint =
+      getCanvasPoint(event);
 
-    isDrawing.current =
-      false;
+    finishStroke(endPoint);
+  };
 
 
-    if (
-      currentStroke.current.length < 2
-    ) {
+  const handleMouseLeave = () => {
 
-      currentStroke.current =
-        [];
-
+    if (tool === "eraser") {
+      isDrawing.current = false;
+      erasedThisDrag.current.clear();
       return;
     }
 
+    if (isDrawing.current && tool === "pen") {
+      isDrawing.current = false;
+      currentPoints.current = [];
+      redrawBoard();
+    }
+  };
 
-    sendMessage({
+  // ==========================================================
+  // FINISH STROKE
+  // ==========================================================
 
-      type:
-        "stroke",
+  const finishStroke = (endPoint) => {
 
-      stroke: {
+    const startPoint =
+      currentPoints.current[0];
 
-        points:
-          currentStroke.current,
+    if (!startPoint) {
+      isDrawing.current = false;
+      return;
+    }
 
-        color:
+    let points;
+
+    if (tool === "pen") {
+      points = currentPoints.current;
+    } else {
+      points = getShapePoints(
+        startPoint,
+        endPoint,
+        tool
+      );
+    }
+
+    if (points.length >= 2) {
+      sendMessage({
+        type: "stroke",
+        stroke: {
+          points,
           color,
-
-        size:
           size,
+          tool
+        }
+      });
+    }
 
-        tool:
-          "pen"
-
-      }
-
-    });
-
-
-    currentStroke.current =
-      [];
-
+    isDrawing.current = false;
+    currentPoints.current = [];
+    lastPoint.current = null;
+    redrawBoard();
   };
 
 
   // ==========================================================
-  // FIND OWN STROKE
+  // ERASE HIT TEST
   // ==========================================================
 
   const findOwnStrokeAtPoint = (
@@ -989,7 +1349,7 @@ function RoomPage() {
 
 
       const points =
-        stroke.points;
+        stroke.points || [];
 
 
       for (
@@ -1000,7 +1360,6 @@ function RoomPage() {
 
         const p1 =
           points[j - 1];
-
 
         const p2 =
           points[j];
@@ -1018,8 +1377,7 @@ function RoomPage() {
 
 
         const strokeRadius =
-          (stroke.size || 5)
-          / 2;
+          (stroke.size || 5) / 2;
 
 
         if (
@@ -1041,10 +1399,6 @@ function RoomPage() {
 
   };
 
-
-  // ==========================================================
-  // DISTANCE TO SEGMENT
-  // ==========================================================
 
   const distanceToSegment = (
     px,
@@ -1068,10 +1422,8 @@ function RoomPage() {
     ) {
 
       return Math.sqrt(
-
         (px - x1) ** 2 +
         (py - y1) ** 2
-
       );
 
     }
@@ -1087,35 +1439,33 @@ function RoomPage() {
             (px - x1) * dx +
             (py - y1) * dy
           ) /
-
           (
             dx * dx +
             dy * dy
           )
+
         )
+
       );
 
 
     const closestX =
       x1 + t * dx;
 
-
     const closestY =
       y1 + t * dy;
 
 
     return Math.sqrt(
-
       (px - closestX) ** 2 +
       (py - closestY) ** 2
-
     );
 
   };
 
 
   // ==========================================================
-  // UNDO
+  // ACTIONS
   // ==========================================================
 
   const undo = () => {
@@ -1127,10 +1477,6 @@ function RoomPage() {
   };
 
 
-  // ==========================================================
-  // REDO
-  // ==========================================================
-
   const redo = () => {
 
     sendMessage({
@@ -1139,10 +1485,6 @@ function RoomPage() {
 
   };
 
-
-  // ==========================================================
-  // DELETE MY STROKES
-  // ==========================================================
 
   const deleteMyStrokes = () => {
 
@@ -1156,20 +1498,14 @@ function RoomPage() {
     ) {
 
       sendMessage({
-
         type:
           "delete_my_strokes"
-
       });
 
     }
 
   };
 
-
-  // ==========================================================
-  // DELETE ALL
-  // ==========================================================
 
   const deleteAllStrokes = () => {
 
@@ -1183,20 +1519,14 @@ function RoomPage() {
     ) {
 
       sendMessage({
-
         type:
           "delete_all_strokes"
-
       });
 
     }
 
   };
 
-
-  // ==========================================================
-  // DELETE ROOM
-  // ==========================================================
 
   const deleteRoom = () => {
 
@@ -1210,20 +1540,14 @@ function RoomPage() {
     ) {
 
       sendMessage({
-
         type:
           "delete_room"
-
       });
 
     }
 
   };
 
-
-  // ==========================================================
-  // COPY ROOM CODE
-  // ==========================================================
 
   const copyRoomCode = async () => {
 
@@ -1233,18 +1557,13 @@ function RoomPage() {
         roomCode
       );
 
-
       setMessage(
         "Room code copied!"
       );
 
 
       setTimeout(
-        () => {
-
-          setMessage("");
-
-        },
+        () => setMessage(""),
         1500
       );
 
@@ -1259,6 +1578,15 @@ function RoomPage() {
   };
 
 
+  const selectTool = (newTool) => {
+
+    setTool(newTool);
+
+    setShowShapeMenu(false);
+
+  };
+
+
   // ==========================================================
   // ROOM UI
   // ==========================================================
@@ -1266,10 +1594,6 @@ function RoomPage() {
   return (
 
     <div className="room-page">
-
-      {/* ====================================================
-          HEADER
-          ==================================================== */}
 
       <header className="top-header">
 
@@ -1279,9 +1603,7 @@ function RoomPage() {
             ✦
           </div>
 
-          <span>
-            Sketchers
-          </span>
+          <span>Sketchers</span>
 
         </div>
 
@@ -1295,9 +1617,7 @@ function RoomPage() {
 
           <button
             className="room-code"
-            onClick={
-              copyRoomCode
-            }
+            onClick={copyRoomCode}
             title="Copy room code"
           >
             {roomCode}
@@ -1336,13 +1656,11 @@ function RoomPage() {
       </header>
 
 
-      {/* ====================================================
-          TOOLBAR
-          ==================================================== */}
-
       <div className="toolbar">
 
-        {/* Tools */}
+        {/* --------------------------------------------------
+            MAIN TOOLS
+            -------------------------------------------------- */}
 
         <div className="toolbar-group">
 
@@ -1353,12 +1671,80 @@ function RoomPage() {
                 : "tool-button"
             }
             onClick={() =>
-              setTool("pen")
+              selectTool("pen")
             }
             title="Pen"
           >
             ✏️
           </button>
+
+
+          <div className="shape-selector">
+
+            <button
+              className={
+                shapes.some(
+                  shape =>
+                    shape.id === tool
+                )
+                  ? "tool-button active"
+                  : "tool-button"
+              }
+              onClick={() =>
+                setShowShapeMenu(
+                  !showShapeMenu
+                )
+              }
+              title="Shapes"
+            >
+              ◇
+            </button>
+
+
+            {showShapeMenu && (
+
+              <div className="shape-menu">
+
+                <div className="menu-title">
+                  Shapes
+                </div>
+
+
+                {shapes.map(
+                  (shape) => (
+
+                    <button
+                      key={shape.id}
+                      className={
+                        tool === shape.id
+                          ? "menu-item selected"
+                          : "menu-item"
+                      }
+                      onClick={() =>
+                        selectTool(
+                          shape.id
+                        )
+                      }
+                    >
+
+                      <span className="shape-icon">
+                        {shape.icon}
+                      </span>
+
+                      <span>
+                        {shape.label}
+                      </span>
+
+                    </button>
+
+                  )
+                )}
+
+              </div>
+
+            )}
+
+          </div>
 
 
           <button
@@ -1368,7 +1754,7 @@ function RoomPage() {
                 : "tool-button"
             }
             onClick={() =>
-              setTool("eraser")
+              selectTool("eraser")
             }
             title="Stroke eraser"
           >
@@ -1381,84 +1767,174 @@ function RoomPage() {
         <div className="toolbar-separator" />
 
 
-        {/* Colors */}
+        {/* --------------------------------------------------
+            PALETTE / DYNAMIC COLOR PICKER
+            -------------------------------------------------- */}
 
-        <div className="color-palette">
+        <div className="palette-area">
 
-          {colors.map(
-            (paletteColor) => (
+          <div className="color-palette">
 
-              <button
+            {colors.map(
+              (paletteColor) => (
 
-                key={
-                  paletteColor
-                }
+                <button
+                  key={paletteColor}
+                  className={
+                    paletteStyle === "circle"
+                      ? (
+                        color === paletteColor
+                          ? "color-swatch circle selected"
+                          : "color-swatch circle"
+                      )
+                      : (
+                        color === paletteColor
+                          ? "color-swatch rectangle selected"
+                          : "color-swatch rectangle"
+                      )
+                  }
+                  style={{
+                    backgroundColor: paletteColor
+                  }}
+                  onClick={() => {
+                    setColorFromHex(paletteColor);
+                    setTool("pen");
+                  }}
+                  title={paletteColor}
+                />
 
-                className={
-                  color ===
-                  paletteColor
-                    ? "color-swatch selected"
-                    : "color-swatch"
-                }
+              )
+            )}
 
-                style={{
-                  backgroundColor:
-                    paletteColor
-                }}
-
-                onClick={() => {
-
-                  setColor(
-                    paletteColor
-                  );
-
-                  setTool(
-                    "pen"
-                  );
-
-                }}
-
-                title={
-                  paletteColor
-                }
-
-              />
-
-            )
-          )}
+          </div>
 
 
-          <input
+          <div className="dynamic-color-picker">
 
-            className="custom-color"
+            <button
+              className={
+                showColorPicker
+                  ? "dynamic-color-button open"
+                  : "dynamic-color-button"
+              }
+              style={{
+                backgroundColor: color
+              }}
+              onClick={() =>
+                setShowColorPicker(
+                  current => !current
+                )
+              }
+              title="Choose any color"
+            />
 
-            type="color"
 
-            value={color}
+            {showColorPicker && (
 
-            onChange={(event) => {
+              <div className="color-picker-panel">
 
-              setColor(
-                event.target.value
-              );
+                <div
+                  ref={colorAreaRef}
+                  className="color-area"
+                  style={{
+                    background: `linear-gradient(to top, #000000, transparent), linear-gradient(to right, #ffffff, hsl(${hue} 100% 50%))`
+                  }}
+                  onPointerDown={
+                    handleColorAreaPointerDown
+                  }
+                  onPointerMove={
+                    handleColorAreaPointerMove
+                  }
+                >
 
-              setTool(
-                "pen"
-              );
+                  <div
+                    className="color-area-cursor"
+                    style={{
+                      left: `${saturation * 100}%`,
+                      top: `${(1 - value) * 100}%`
+                    }}
+                  />
 
-            }}
+                </div>
 
-            title="Custom color"
 
-          />
+                <div className="hue-control">
+
+                  <input
+                    type="range"
+                    min="0"
+                    max="360"
+                    value={hue}
+                    onChange={
+                      handleHueChange
+                    }
+                    className="hue-slider"
+                  />
+
+                </div>
+
+
+                <div className="selected-color-info">
+
+                  <span
+                    className="selected-color-preview"
+                    style={{
+                      backgroundColor: color
+                    }}
+                  />
+
+                  <span className="selected-color-hex">
+                    {color.toUpperCase()}
+                  </span>
+
+                </div>
+
+              </div>
+
+            )}
+
+          </div>
+
+
+          <button
+            className="palette-style-button"
+            onClick={() =>
+              setPaletteStyle(
+                paletteStyle === "circle"
+                  ? "rectangle"
+                  : "circle"
+              )
+            }
+            title="Switch palette style"
+          >
+            {paletteStyle === "circle"
+              ? "●"
+              : "▬"}
+          </button>
+
+
+          <button
+            className={
+              tool === "picker"
+                ? "eyedropper-button active"
+                : "eyedropper-button"
+            }
+            onClick={() =>
+              selectTool("picker")
+            }
+            title="Pick a color from the canvas"
+          >
+            🖌️
+          </button>
 
         </div>
-
 
         <div className="toolbar-separator" />
 
 
-        {/* Brush size */}
+        {/* --------------------------------------------------
+            SIZE
+            -------------------------------------------------- */}
 
         <div className="size-control">
 
@@ -1468,25 +1944,17 @@ function RoomPage() {
 
 
           <input
-
             type="range"
-
             min="1"
-
             max="30"
-
             value={size}
-
-            onChange={(event) => {
-
+            onChange={(event) =>
               setSize(
                 Number(
                   event.target.value
                 )
-              );
-
-            }}
-
+              )
+            }
           />
 
 
@@ -1500,7 +1968,9 @@ function RoomPage() {
         <div className="toolbar-separator" />
 
 
-        {/* Undo / Redo */}
+        {/* --------------------------------------------------
+            UNDO REDO
+            -------------------------------------------------- */}
 
         <div className="toolbar-group">
 
@@ -1524,12 +1994,8 @@ function RoomPage() {
         </div>
 
 
-        {/* Spacer */}
-
         <div className="toolbar-spacer" />
 
-
-        {/* My strokes */}
 
         <button
           className="toolbar-text-button"
@@ -1541,26 +2007,21 @@ function RoomPage() {
         </button>
 
 
-        {/* Host menu */}
-
         {isHost && (
 
           <div className="host-menu-container">
 
             <button
-
               className={
                 showHostMenu
                   ? "host-button open"
                   : "host-button"
               }
-
               onClick={() =>
                 setShowHostMenu(
                   !showHostMenu
                 )
               }
-
             >
               👑 Host ▾
             </button>
@@ -1604,51 +2065,25 @@ function RoomPage() {
       </div>
 
 
-      {/* ====================================================
-          MESSAGE
-          ==================================================== */}
-
       {message && (
 
         <div className="floating-message">
-
           {message}
-
         </div>
 
       )}
 
-
-      {/* ====================================================
-          CANVAS
-          ==================================================== */}
 
       <main className="canvas-area">
 
         <div className="canvas-wrapper">
 
           <canvas
-
-            ref={
-              canvasRef
-            }
-
-            onMouseDown={
-              handleMouseDown
-            }
-
-            onMouseMove={
-              handleMouseMove
-            }
-
-            onMouseUp={
-              handleMouseUp
-            }
-
-            onMouseLeave={
-              handleMouseUp
-            }
-
+            ref={canvasRef}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseLeave}
           />
 
         </div>
@@ -1676,17 +2111,12 @@ function App() {
 
         <Route
           path="/"
-          element={
-            <HomePage />
-          }
+          element={<HomePage />}
         />
-
 
         <Route
           path="/room/:roomCode"
-          element={
-            <RoomPage />
-          }
+          element={<RoomPage />}
         />
 
       </Routes>

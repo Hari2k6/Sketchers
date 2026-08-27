@@ -1188,3 +1188,368 @@ canvas {
   }
 
 }
+
+/* ============================================================
+   SHAPE SELECTOR
+   ============================================================ */
+
+.shape-selector {
+  position: relative;
+}
+
+.shape-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 185px;
+  padding: 7px;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 15px 35px rgba(15, 23, 42, 0.15);
+  z-index: 100;
+}
+
+.menu-title {
+  padding: 8px 10px;
+  color: #94a3b8;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #334155;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.menu-item:hover {
+  background: #f1f5f9;
+}
+
+.menu-item.selected {
+  background: #ede9fe;
+  color: #5b21b6;
+  font-weight: 700;
+}
+
+.shape-icon {
+  width: 25px;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 20px;
+}
+
+
+/* ============================================================
+   DYNAMIC COLOR PALETTE
+   ============================================================ */
+
+.palette-area {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.color-palette {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 390px;
+  overflow-x: auto;
+  padding: 4px 2px;
+  scrollbar-width: thin;
+}
+
+.color-palette::-webkit-scrollbar {
+  height: 4px;
+}
+
+.color-palette::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 999px;
+}
+
+.color-swatch.circle {
+  flex: 0 0 21px;
+  width: 21px;
+  height: 21px;
+  border-radius: 50%;
+}
+
+.color-swatch.rectangle {
+  flex: 0 0 27px;
+  width: 27px;
+  height: 19px;
+  border-radius: 5px;
+}
+
+.color-swatch.selected {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+  transform: scale(1.08);
+}
+
+.color-swatch:hover {
+  transform: scale(1.14);
+}
+
+.palette-style-button {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.palette-style-button:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.color-picker-button {
+  position: relative;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.color-picker-button span {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  outline: 1px solid #cbd5e1;
+}
+
+.color-picker-button input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.color-picker-button:hover {
+  background: #f1f5f9;
+}
+
+
+/* ============================================================
+   SHAPE CURSOR / TOOLBAR TUNING
+   ============================================================ */
+
+.shape-selector .tool-button {
+  font-family: system-ui, sans-serif;
+  font-size: 20px;
+}
+
+@media (max-width: 900px) {
+  .palette-area {
+    max-width: 42vw;
+  }
+
+  .color-palette {
+    max-width: 28vw;
+  }
+}
+
+@media (max-width: 650px) {
+  .palette-area {
+    max-width: none;
+  }
+
+  .color-palette {
+    max-width: 180px;
+  }
+}
+
+/* ============================================================
+   SKETCHERS v1.0 DYNAMIC COLOR PICKER
+   ============================================================ */
+
+.dynamic-color-picker {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.dynamic-color-button {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 2px solid #ffffff;
+  border-radius: 8px;
+  outline: 1px solid #cbd5e1;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+.dynamic-color-button:hover,
+.dynamic-color-button.open {
+  transform: scale(1.06);
+  outline: 2px solid #6366f1;
+  outline-offset: 1px;
+}
+
+.color-picker-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 250px;
+  padding: 12px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18);
+  z-index: 100;
+}
+
+.color-area {
+  position: relative;
+  width: 100%;
+  height: 175px;
+  border-radius: 9px;
+  overflow: hidden;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.color-area-cursor {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  transform: translate(-50%, -50%);
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.55),
+              0 1px 4px rgba(15, 23, 42, 0.3);
+  pointer-events: none;
+}
+
+.hue-control {
+  margin-top: 12px;
+}
+
+.hue-slider {
+  width: 100%;
+  height: 16px;
+  margin: 0;
+  appearance: none;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    hsl(0 100% 50%),
+    hsl(60 100% 50%),
+    hsl(120 100% 50%),
+    hsl(180 100% 50%),
+    hsl(240 100% 50%),
+    hsl(300 100% 50%),
+    hsl(360 100% 50%)
+  );
+  cursor: pointer;
+}
+
+.hue-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px #64748b,
+              0 1px 4px rgba(15, 23, 42, 0.3);
+}
+
+.hue-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px #64748b,
+              0 1px 4px rgba(15, 23, 42, 0.3);
+}
+
+.selected-color-info {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 11px;
+  padding-top: 10px;
+  border-top: 1px solid #eef2f7;
+}
+
+.selected-color-preview {
+  width: 27px;
+  height: 27px;
+  flex: 0 0 27px;
+  border-radius: 7px;
+  border: 1px solid #cbd5e1;
+}
+
+.selected-color-hex {
+  color: #334155;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+.eyedropper-button {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #475569;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.eyedropper-button:hover {
+  background: #f1f5f9;
+}
+
+.eyedropper-button.active {
+  background: #ede9fe;
+  border-color: #c4b5fd;
+  box-shadow: inset 0 0 0 1px #c4b5fd;
+}
+
+@media (max-width: 700px) {
+  .color-picker-panel {
+    left: auto;
+    right: 0;
+    transform: none;
+  }
+}
